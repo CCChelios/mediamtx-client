@@ -730,6 +730,10 @@
 	                fluid: true,
 	            });
 	            initChunkedVideoJs(window.vjsPlayer, recordingUrl, duration);
+	            window.vjsPlayer.on('error', () => {
+	                const err = window.vjsPlayer.error();
+	                console.error('Video.js error:', err, 'src:', window.vjsPlayer.currentSrc());
+	            });
 
 	            // Создаём оверлей
 	            let overlay = document.getElementById('player-overlay');
