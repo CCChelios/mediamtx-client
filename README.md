@@ -1,71 +1,82 @@
 # front_mediamtx
 
-Простой статический веб‑интерфейс для **MediaMTX**:
+Основная часть репозитория — **плеер** `scripts/player.js`: воспроизведение записей **MediaMTX Playback API** в **Video.js** с “бесшовной” перемоткой через **MSE** (Media Source Extensions) и `format=fmp4`.
 
-- показывает список путей (`/v3/paths/list`);
-- показывает список записей за последние 24 часа через **Playback API** (`/list`);
-- воспроизводит записи в **Video.js**;
-- перемотка и подгрузка выполняются через **MSE** (Media Source Extensions) и `format=fmp4` (чанки докидываются в один `<video>`, без перезагрузки `src`).
+`index.html` в этом репозитории — это **пример фронта** (как собрать список путей/записей и дернуть плеер).
 
 ## Требования
 
-- Запущенный MediaMTX с включённым **Web API** (по умолчанию в UI: `http://localhost:9997`).
-- Включённый **Playback API** (по умолчанию в UI: `http://localhost:9996`).
-- Для “бесшовной” перемотки нужен `format=fmp4` в `/get` (обычный `format=mp4` не содержит `moof` и для MSE не подходит).
-- CORS: страница должна иметь доступ к `9997/9996` (обычно проще открывать UI через локальный http‑сервер, а не `file://`).
+- Запущенный MediaMTX с включённым **Playback API** (обычно: `http://localhost:9996`).
+- Для MSE‑перемотки нужен `format=fmp4` в `GET /get` (обычный `format=mp4` не содержит `moof` и для MSE не подходит).
+- CORS/mixed content: страница должна иметь доступ к Playback API (и Web API, если используете пример).
 
-## Запуск
+## Плеер (`scripts/player.js`)
 
-1) Подними простой статический сервер в папке проекта:
+### Что делает
+
+MediaMTX отдаёт запись по:
+
+`GET /get?path=...&start=...&duration=...&format=fmp4`
+
+Плеер:
+
+- создаёт `MediaSource`/`SourceBuffer` с корректным MIME (`video/mp4; codecs="..."`), кодеки извлекает из init‑сегмента через `mp4box`;
+- первый чанк режет на init+media (ищет первый `moof`), init добавляет один раз;
+- дальше докачивает чанки вперёд по мере приближения к концу буфера;
+- при перемотке **не очищает** буфер: докидывает нужный чанк и прыгает в позицию.
+
+Важно: Video.js обычно ограничивает seek по `player.seekable()`. Для MSE у браузера `seekable` часто равен `buffered`, из‑за чего клик по таймлайну “не работает”. В `player.js` это обходится виртуальным `seekable` на всю длительность записи.
+
+### Как подключить
+
+`scripts/player.js` рассчитан на подключение “как есть” в страницу (без сборки) и создает глобальные функции.
+
+Минимум для работы:
+
+- `videojs` (Video.js)
+- `MP4Box` (UMD сборка `mp4box.all.min.js`)
+- `<input id="playbackUrl">` со значением базового URL Playback API (плеер читает его оттуда)
+
+Пример:
+
+```html
+<input id="playbackUrl" value="http://localhost:9996">
+
+<script src="https://vjs.zencdn.net/8.12.0/video.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/mp4box@0.5.2/dist/mp4box.all.min.js"></script>
+<script src="scripts/player.js"></script>
+
+<button onclick="playRecording('cam1','2026-03-12T00:00:00Z',60)">Play</button>
+```
+
+Параметры `playRecording(pathName, startIso, durationSeconds)` лучше брать из ответа `GET /list` (Playback API), чтобы формат `start` точно совпадал с тем, что ожидает MediaMTX.
+
+## Example front (`index.html`)
+
+`index.html` — статическая страница‑пример:
+
+- показывает список путей через **Web API** (`GET /v3/paths/list`, обычно `http://localhost:9997`);
+- показывает список сегментов записи через **Playback API** (`GET /list`) за интервал от `1970-01-01T00:00:00.000Z` до “сейчас”;
+- по клику на сегмент открывает оверлей‑плеер через `playRecording(...)`.
+
+## Запуск примера
 
 ```bash
 python3 -m http.server 8080
 ```
 
-2) Открой в браузере:
+Открой в браузере:
 
 ```text
 http://localhost:8080
 ```
 
-3) В интерфейсе проверь/укажи:
+В интерфейсе проверь/укажи:
 
 - `API URL` → `http://localhost:9997`
 - `Playback URL` → `http://localhost:9996`
 
 Нажми **“Загрузить пути”** → кликни по имени пути → выбери сегмент записи.
-
-## Как работает воспроизведение (кратко)
-
-MediaMTX отдаёт запись по `GET /get?path=...&start=...&duration=...&format=fmp4`.
-
-UI:
-
-- создаёт `MediaSource` и `SourceBuffer` с правильным MIME (`video/mp4; codecs="..."`);
-- первый запрос берёт init‑сегмент + медиа‑фрагменты, init добавляется один раз;
-- далее UI докачивает новые чанки вперёд по мере приближения к концу буфера;
-- при перемотке UI **не очищает** буфер, а докидывает нужный чанк и прыгает в позицию.
-
-На таймлайне Video.js обычно видно:
-
-- тёмно‑серое — реально буферизовано (`buffered`);
-- светло‑серое — “можно перематывать” (`seekable`). В UI `seekable` расширен на всю длительность записи, чтобы клик по таймлайну работал даже вне текущего буфера.
-
-## Проверка, что `fmp4` действительно fMP4
-
-Скрипт сам берёт последнюю запись `cam3` за 24 часа и печатает боксы MP4 (ищет `moof`):
-
-```bash
-node scripts/probe-fmp4-cam3.mjs
-```
-
-Параметры:
-
-```bash
-node scripts/probe-fmp4-cam3.mjs --path cam3 --playback http://localhost:9996 --bytes 1048576
-```
-
-Если для `format=fmp4` в начале есть `moof` — можно использовать MSE.
 
 ## Траблшутинг
 
@@ -91,4 +102,3 @@ node scripts/probe-fmp4-cam3.mjs --path cam3 --playback http://localhost:9996 --
 ## Лицензия
 
 MIT (если нужно — добавь `LICENSE`).
-
