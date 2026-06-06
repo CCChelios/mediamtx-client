@@ -1,0 +1,1246 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MediaMTX - Управление путями</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: Arial, sans-serif;
+            background: #f5f5f5;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 900px;
+            margin: 0 auto;
+        }
+
+        .header {
+            margin-bottom: 20px;
+        }
+
+        .header h1 {
+            font-size: 1.8em;
+            color: #333;
+            margin-bottom: 5px;
+        }
+
+        .controls {
+            background: white;
+            padding: 15px;
+            margin-bottom: 20px;
+            border: 1px solid #ddd;
+            display: flex;
+            gap: 10px;
+            flex-wrap: wrap;
+        }
+
+        .controls input {
+            flex: 1;
+            min-width: 200px;
+            padding: 8px;
+            border: 1px solid #ddd;
+            font-size: 1em;
+        }
+
+        .controls button {
+            padding: 8px 20px;
+            background: #333;
+            color: white;
+            border: none;
+            cursor: pointer;
+            font-size: 1em;
+        }
+
+        .controls button:hover {
+            background: #555;
+        }
+
+        .loading {
+            text-align: center;
+            color: #666;
+            padding: 30px;
+        }
+
+        .error {
+            background: #ffebee;
+            color: #c62828;
+            padding: 12px;
+            margin-bottom: 15px;
+            border-left: 3px solid #c62828;
+        }
+
+        .success {
+            background: #e8f5e9;
+            color: #2e7d32;
+            padding: 12px;
+            margin-bottom: 15px;
+            border-left: 3px solid #2e7d32;
+        }
+
+        .paths-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(400px, 1fr));
+            gap: 15px;
+        }
+
+        .path-card {
+            background: white;
+            border: 1px solid #ddd;
+        }
+
+        .path-header {
+            background: #333;
+            color: white;
+            padding: 12px;
+            font-size: 1.1em;
+            font-weight: bold;
+            word-break: break-all;
+        }
+
+        .path-info {
+            padding: 10px;
+            border-bottom: 1px solid #ddd;
+            font-size: 0.9em;
+        }
+
+        .path-info-row {
+            display: flex;
+            justify-content: space-between;
+            margin: 4px 0;
+        }
+
+        .path-info-label {
+            font-weight: bold;
+            color: #333;
+        }
+
+        .path-content {
+            padding: 10px;
+        }
+
+        .records-list {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+
+        .record {
+            background: #f9f9f9;
+            padding: 8px;
+            border-left: 2px solid #333;
+            font-size: 0.9em;
+        }
+
+        .record-value {
+            color: #555;
+        }
+
+        .no-records {
+            text-align: center;
+            color: #999;
+            padding: 15px;
+            font-style: italic;
+        }
+
+        .no-paths {
+            text-align: center;
+            color: #666;
+            font-size: 1.1em;
+            padding: 30px;
+            background: white;
+            border: 1px solid #ddd;
+        }
+
+        .recordings-section {
+            background: #fafafa;
+            padding: 10px;
+            border-top: 1px solid #ddd;
+            display: none;
+        }
+
+        .recordings-section.show {
+            display: block;
+        }
+
+        .recordings-header {
+            font-weight: bold;
+            margin-bottom: 8px;
+            color: #333;
+        }
+
+        .recording-item {
+            background: white;
+            padding: 8px;
+            margin: 5px 0;
+            border: 1px solid #ddd;
+            font-size: 0.9em;
+        }
+
+        .segment-item {
+            padding: 4px 8px;
+            margin: 3px 0;
+            background: #f0f0f0;
+            border-left: 2px solid #666;
+            font-size: 0.85em;
+            transition: background 0.2s;
+        }
+
+        .segment-item:hover {
+            background: #e0e0e0;
+            border-left-color: #333;
+        }
+
+        details {
+            cursor: pointer;
+        }
+
+        details summary {
+            font-weight: bold;
+            color: #333;
+            padding: 5px;
+            margin: -5px;
+            border-radius: 3px;
+        }
+
+        details summary:hover {
+            background: #e8e8e8;
+        }
+
+        /* Video.js стили */
+        .video-js {
+            font-family: Arial, sans-serif;
+        }
+
+        .vjs-default-skin .vjs-control-bar {
+            background-color: rgba(0, 0, 0, 0.8);
+        }
+
+        .vjs-default-skin .vjs-progress-control {
+            height: 8px;
+        }
+
+        .vjs-default-skin .vjs-progress-holder {
+            background-color: rgba(255, 255, 255, 0.3);
+        }
+
+        .vjs-default-skin .vjs-play-progress {
+            background-color: #ff0000;
+        }
+
+        .vjs-default-skin .vjs-load-progress {
+            background-color: rgba(255, 255, 255, 0.5);
+        }
+
+        .vjs-default-skin .vjs-time-tooltip {
+            background-color: rgba(0, 0, 0, 0.9);
+            color: white;
+            padding: 3px 6px;
+            border-radius: 3px;
+            font-size: 12px;
+        }
+
+        /* Кастомный плеер */
+        .custom-player {
+            background: #000;
+            border-radius: 3px;
+            overflow: hidden;
+        }
+
+        .player-video {
+            width: 100%;
+            height: auto;
+            display: block;
+            background: #000;
+        }
+
+        .player-controls {
+            background: rgba(0, 0, 0, 0.9);
+            padding: 10px;
+            color: white;
+            font-size: 14px;
+        }
+
+        .progress-container {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin-bottom: 8px;
+        }
+
+        .progress-bar {
+            flex: 1;
+            height: 6px;
+            background: rgba(255, 255, 255, 0.3);
+            border-radius: 3px;
+            cursor: pointer;
+            position: relative;
+        }
+
+        .progress-fill {
+            height: 100%;
+            background: #ff0000;
+            border-radius: 3px;
+            width: 0%;
+            transition: width 0.1s;
+        }
+
+        .progress-hover {
+            position: absolute;
+            height: 100%;
+            background: rgba(255, 255, 255, 0.5);
+            border-radius: 3px;
+            pointer-events: none;
+        }
+
+        .control-buttons {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .control-btn {
+            background: none;
+            border: none;
+            color: white;
+            cursor: pointer;
+            font-size: 16px;
+            padding: 5px 10px;
+            border-radius: 3px;
+            transition: background 0.2s;
+        }
+
+        .control-btn:hover {
+            background: rgba(255, 255, 255, 0.1);
+        }
+
+        .control-btn:active {
+            background: rgba(255, 255, 255, 0.2);
+        }
+
+        .time-display {
+            font-size: 12px;
+            color: #aaa;
+            min-width: 100px;
+            text-align: right;
+        }
+
+        .volume-control {
+            display: flex;
+            align-items: center;
+            gap: 5px;
+        }
+
+        .volume-slider {
+            width: 50px;
+            cursor: pointer;
+        }
+
+        .loading-indicator {
+            display: none;
+            width: 20px;
+            height: 20px;
+            border: 2px solid rgba(255, 255, 255, 0.3);
+            border-top-color: white;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+        }
+
+        .loading-indicator.show {
+            display: inline-block;
+        }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+
+        @media (max-width: 768px) {
+            .paths-grid {
+                grid-template-columns: 1fr;
+            }
+
+            .controls {
+                flex-direction: column;
+            }
+
+            .controls input {
+                min-width: 100%;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>Пути</h1>
+        </div>
+
+        <div class="controls">
+            <input 
+                type="text" 
+                id="apiUrl" 
+                placeholder="Введите URL API (например: http://localhost:9997)"
+                value="http://localhost:9997"
+            >
+            <input 
+                type="text" 
+                id="playbackUrl" 
+                placeholder="Введите URL Playback (например: http://localhost:9996)"
+                value="http://localhost:9996"
+            >
+            <button onclick="loadPaths()">Загрузить пути</button>
+        </div>
+
+        <div id="message"></div>
+        <div id="content"></div>
+    </div>
+
+    <script>
+        // Загрузка путей с API
+        async function loadPaths() {
+            const apiUrl = document.getElementById('apiUrl').value.trim();
+            const contentDiv = document.getElementById('content');
+            const messageDiv = document.getElementById('message');
+
+            if (!apiUrl) {
+                showMessage('Пожалуйста, введите URL API', 'error');
+                return;
+            }
+
+            // Очистка сообщения
+            messageDiv.innerHTML = '';
+
+            // Показываем загрузку
+            contentDiv.innerHTML = '<div class="loading"><div class="spinner"></div><p>Загрузка путей...</p></div>';
+
+            try {
+                // Получаем список путей
+                const response = await fetch(`${apiUrl}/v3/paths/list`, {
+                    method: 'GET',
+                    headers: {
+                        'Accept': 'application/json'
+                    }
+                });
+
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                }
+
+                const data = await response.json();
+                displayPaths(data, apiUrl);
+            } catch (error) {
+                showMessage(`Ошибка при загрузке: ${error.message}`, 'error');
+                contentDiv.innerHTML = '';
+                console.error('Error:', error);
+            }
+        }
+
+        // Отображение путей
+        function displayPaths(data, apiUrl) {
+            const contentDiv = document.getElementById('content');
+
+            // Проверяем, есть ли items в ответе
+            const items = data.items || [];
+            
+            if (!items || items.length === 0) {
+                contentDiv.innerHTML = '<div class="no-paths">Нет доступных путей</div>';
+                return;
+            }
+
+            let html = '<div class="paths-grid">';
+
+            for (let index = 0; index < items.length; index++) {
+                const pathData = items[index];
+                const pathName = pathData.name || 'Unknown';
+                const source = pathData.source ? pathData.source.type : 'N/A';
+                const ready = pathData.ready ? '✓ Готов' : '✗ Не готов';
+                const bytesReceived = pathData.bytesReceived || 0;
+                const bytesSent = pathData.bytesSent || 0;
+                const readersCount = pathData.readers ? pathData.readers.length : 0;
+                const recordingsId = `recordings-${index}`;
+                const pathEncoded = encodeURIComponent(pathName);
+
+                html += `
+                    <div class="path-card">
+                        <div class="path-header path-header-clickable" data-path-enc="${escapeHtml(pathEncoded)}" data-recordings-id="${recordingsId}" style="cursor: pointer;">
+                            ${escapeHtml(pathName)}
+                        </div>
+                        <div class="path-info">
+                            <div class="path-info-row">
+                                <span class="path-info-label">Статус:</span>
+                                <span>${escapeHtml(ready)}</span>
+                            </div>
+                            <div class="path-info-row">
+                                <span class="path-info-label">Источник:</span>
+                                <span>${escapeHtml(source)}</span>
+                            </div>
+                            <div class="path-info-row">
+                                <span class="path-info-label">Читателей:</span>
+                                <span>${readersCount}</span>
+                            </div>
+                            <div class="path-info-row">
+                                <span class="path-info-label">Получено:</span>
+                                <span>${formatBytes(bytesReceived)}</span>
+                            </div>
+                            <div class="path-info-row">
+                                <span class="path-info-label">Отправлено:</span>
+                                <span>${formatBytes(bytesSent)}</span>
+                            </div>
+                        </div>
+                        <div class="path-content">
+                            ${renderTracks(pathData.tracks)}
+                        </div>
+                        <div class="recordings-section" id="${recordingsId}"></div>
+                    </div>
+                `;
+            }
+
+            html += '</div>';
+            contentDiv.innerHTML = html;
+
+            // Подключаем обработчики клика по пути после рендера
+            const headers = contentDiv.querySelectorAll('.path-header-clickable');
+            for (const el of headers) {
+                el.addEventListener('click', () => {
+                    const recordingsId = el.getAttribute('data-recordings-id');
+                    const recordingsSection = recordingsId ? document.getElementById(recordingsId) : null;
+                    const pathEnc = el.getAttribute('data-path-enc') || '';
+                    const pathName = safeDecodeURIComponent(pathEnc);
+                    loadRecordings(pathName, recordingsSection);
+                });
+            }
+
+            showMessage(`Загружено ${items.length} путей`, 'success');
+        }
+
+        // Отображение треков
+        function renderTracks(tracks) {
+            if (!tracks || tracks.length === 0) {
+                return '<div class="no-records">Нет треков</div>';
+            }
+
+            let html = '<div class="records-list"><strong>Треки:</strong>';
+
+            for (const track of tracks) {
+                html += `<div class="record"><div class="record-value">${escapeHtml(track)}</div></div>`;
+            }
+
+            html += '</div>';
+            return html;
+        }
+
+        // Форматирование размера в байтах
+        function formatBytes(bytes) {
+            if (bytes === 0) return '0 B';
+            const k = 1024;
+            const sizes = ['B', 'KB', 'MB', 'GB'];
+            const i = Math.floor(Math.log(bytes) / Math.log(k));
+            return Math.round(bytes / Math.pow(k, i) * 100) / 100 + ' ' + sizes[i];
+        }
+
+        // Загрузка записей для пути
+        async function loadRecordings(pathName, recordingsSection) {
+            const apiUrl = document.getElementById('apiUrl').value.trim();
+            const playbackUrl = document.getElementById('playbackUrl').value.trim();
+            if (!recordingsSection) {
+                console.warn('Recordings section not found for path:', pathName);
+                return;
+            }
+
+            // Переключаем видимость
+            if (recordingsSection.classList.contains('show')) {
+                recordingsSection.classList.remove('show');
+                return;
+            }
+
+            recordingsSection.innerHTML = '<div class="loading">Загрузка записей...</div>';
+            recordingsSection.classList.add('show');
+
+            try {
+                // Список записей за последние 24 часа через playback API
+                if (playbackUrl) {
+                    const { startIso, endIso } = getLast24hRangeIso();
+                    const listUrl = `${playbackUrl}/list?path=${encodeURIComponent(pathName)}&start=${encodeURIComponent(startIso)}&end=${encodeURIComponent(endIso)}`;
+                    const response = await fetch(listUrl, {
+                        method: 'GET',
+                        headers: { 'Accept': 'application/json' }
+                    });
+
+                    if (response.ok) {
+                        const data = await response.json();
+                        displayRecordingsFromPlayback(data, recordingsSection, pathName, playbackUrl, startIso, endIso);
+                        return;
+                    }
+                } else {
+                    recordingsSection.innerHTML = '<div style="color: #c62828;">Введите URL Playback сервера (например: http://localhost:9996)</div>';
+                    return;
+                }
+
+                // Если playback не сработал, пытаемся получить через API
+                const response = await fetch(`${apiUrl}/v3/recordings/get/${encodeURIComponent(pathName)}`, {
+                    method: 'GET',
+                    headers: {
+                        'Accept': 'application/json'
+                    }
+                });
+
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}`);
+                }
+
+                const data = await response.json();
+                displayRecordings(data, recordingsSection, playbackUrl);
+            } catch (error) {
+                recordingsSection.innerHTML = `<div style="color: #c62828;">Ошибка: ${escapeHtml(error.message)}</div>`;
+                console.error('Error:', error);
+            }
+        }
+
+        // Отображение записей из playback API
+        function displayRecordingsFromPlayback(data, container, pathName, playbackUrl, queryStartIso, queryEndIso) {
+            const recordings = normalizePlaybackListResponse(data);
+            if (!recordings || recordings.length === 0) {
+                container.innerHTML = '<div style="color: #999; font-style: italic;">Нет записей</div>';
+                return;
+            }
+
+            let html = `
+                <div class="recordings-header">📹 Записи за последние 24 часа:</div>
+                <div style="font-size: 0.8em; color: #777; margin-bottom: 6px; word-break: break-all;">
+                    start=${escapeHtml(queryStartIso)}<br>
+                    end=${escapeHtml(queryEndIso)}
+                </div>
+            `;
+
+            for (const recording of recordings) {
+                const start = recording.start || 'Неизвестная дата';
+                const end = recording.end || '';
+                const duration = Number.isFinite(recording.duration) ? recording.duration : 0;
+                const durationStr = duration ? `(${Math.floor(duration)}с)` : '';
+                const endStr = end ? ` → ${escapeHtml(end)}` : '';
+                html += `
+                    <div class="segment-item"
+                         data-start="${escapeHtml(start)}"
+                         data-end="${escapeHtml(end)}"
+                         style="cursor: pointer;">
+                        🔗 ${escapeHtml(start)}${endStr} ${durationStr}
+                    </div>
+                `;
+            }
+
+            container.innerHTML = html;
+
+            // По клику открываем ссылку вида /list?path=...&start=...&end=...
+            const items = container.querySelectorAll('.segment-item');
+            for (const el of items) {
+                el.addEventListener('click', () => {
+                    const start = el.getAttribute('data-start') || '';
+                    const end = el.getAttribute('data-end') || '';
+                    openPlaybackRecordingListUrl(playbackUrl, pathName, start, end);
+                });
+            }
+        }
+
+        // Отображение записей из API
+        function displayRecordings(data, container, playbackUrl) {
+            if (!data.segments || data.segments.length === 0) {
+                container.innerHTML = '<div style="color: #999; font-style: italic;">Нет записей</div>';
+                return;
+            }
+
+            const cutoff = Date.now() - 24 * 60 * 60 * 1000;
+            const segments = data.segments.filter(seg => {
+                const start = seg && seg.start ? new Date(seg.start) : null;
+                if (!start || Number.isNaN(start.getTime())) return false;
+                return start.getTime() >= cutoff;
+            });
+
+            if (segments.length === 0) {
+                container.innerHTML = '<div style="color: #999; font-style: italic;">Нет записей за последние 24 часа</div>';
+                return;
+            }
+
+            let html = '<div class="recordings-header">📹 Записи за последние 24 часа:</div>';
+
+            for (const segment of segments) {
+                const segmentStart = segment.start || 'Неизвестная дата';
+                const duration = segment.duration || 3600; // Используем 1 час по умолчанию
+                const segmentEnd = computeEndIso(segmentStart, duration);
+                html += `
+                    <div class="segment-item"
+                        data-path="${escapeHtml(data.name)}"
+                        data-start="${escapeHtml(segmentStart)}"
+                        data-end="${escapeHtml(segmentEnd)}"
+                        data-duration="${duration}"
+                        style="cursor: pointer;">
+                        🔗 ${escapeHtml(segmentStart)}
+                    </div>
+                `;
+            }
+
+            container.innerHTML = html;
+
+            // Если есть playbackUrl, открываем /list?..., иначе оставляем старое поведение (плеер)
+            const items = container.querySelectorAll('.segment-item');
+            for (const el of items) {
+                el.addEventListener('click', () => {
+                    const pathName = el.getAttribute('data-path') || '';
+                    const start = el.getAttribute('data-start') || '';
+                    const end = el.getAttribute('data-end') || '';
+                    const duration = Number(el.getAttribute('data-duration') || 0);
+                    if (playbackUrl) {
+                        openPlaybackRecordingListUrl(playbackUrl, pathName, start, end);
+                    } else {
+                        playRecording(pathName, start, duration);
+                    }
+                });
+            }
+        }
+
+        function getLast24hRangeIso() {
+            const end = new Date();
+            const start = new Date(end.getTime() - 24 * 60 * 60 * 1000);
+            return { startIso: start.toISOString(), endIso: end.toISOString() };
+        }
+
+        function normalizePlaybackListResponse(payload) {
+            let items = [];
+            if (Array.isArray(payload)) items = payload;
+            else if (payload && Array.isArray(payload.items)) items = payload.items;
+            else if (payload && Array.isArray(payload.segments)) items = payload.segments;
+            else if (payload && Array.isArray(payload.recordings)) items = payload.recordings;
+
+            const out = [];
+            for (const item of items) {
+                if (!item || typeof item !== 'object') continue;
+                const start = item.start ?? item.begin ?? item.from ?? item.time ?? null;
+                const end = item.end ?? item.to ?? null;
+                const duration = typeof item.duration === 'number' ? item.duration : (typeof item.dur === 'number' ? item.dur : NaN);
+                const computedEnd = end || computeEndIso(start, duration);
+                out.push({
+                    start: start || 'Неизвестная дата',
+                    end: computedEnd || '',
+                    duration: Number.isFinite(duration) ? duration : 0
+                });
+            }
+            return out;
+        }
+
+        function computeEndIso(startIso, durationSeconds) {
+            const duration = Number(durationSeconds);
+            if (!startIso || !Number.isFinite(duration) || duration <= 0) return '';
+            const start = new Date(startIso);
+            if (Number.isNaN(start.getTime())) return '';
+            return new Date(start.getTime() + duration * 1000).toISOString();
+        }
+
+        function openPlaybackRecordingListUrl(playbackUrl, pathName, start, end) {
+            if (!playbackUrl) {
+                alert('Пожалуйста, введите URL Playback сервера');
+                return;
+            }
+            if (!start || !end) {
+                alert('Не удалось определить start/end для записи');
+                return;
+            }
+            const url = `${playbackUrl}/list?path=${encodeURIComponent(pathName)}&start=${encodeURIComponent(start)}&end=${encodeURIComponent(end)}`;
+            window.open(url, '_blank', 'noopener');
+        }
+
+        function safeDecodeURIComponent(value) {
+            try {
+                return decodeURIComponent(value);
+            } catch {
+                return value;
+            }
+        }
+
+        // Воспроизведение записи
+        function playRecording(pathName, segmentStart, duration) {
+            const playbackUrl = document.getElementById('playbackUrl').value.trim();
+            
+            if (!playbackUrl) {
+                alert('Пожалуйста, введите URL Playback сервера');
+                return;
+            }
+            
+            // URL для воспроизведения записи - используем format=mp4 для полной загрузки
+            // Берём чуть больше длительность для уверенности в полной записи
+            const safeDuration = Math.ceil(duration) + 10;
+            const recordingUrl = `${playbackUrl}/get?path=${encodeURIComponent(pathName)}&start=${encodeURIComponent(segmentStart)}&duration=${safeDuration}&format=mp4`;
+            
+            // Ищем или создаём плеер
+            let playerContainer = document.getElementById('player-container');
+            if (!playerContainer) {
+                playerContainer = document.createElement('div');
+                playerContainer.id = 'player-container';
+                playerContainer.style.cssText = `
+                    position: fixed;
+                    top: 50%;
+                    left: 50%;
+                    transform: translate(-50%, -50%);
+                    background: white;
+                    border: 1px solid #ddd;
+                    padding: 20px;
+                    z-index: 1000;
+                    box-shadow: 0 0 20px rgba(0,0,0,0.3);
+                    min-width: 600px;
+                    border-radius: 5px;
+                    max-width: 90vw;
+                    max-height: 90vh;
+                    overflow-y: auto;
+                `;
+                document.body.appendChild(playerContainer);
+            }
+
+            // Проверяем поддержку Range запросов
+            checkRangeSupport(recordingUrl, pathName, segmentStart, duration, playerContainer);
+        }
+
+        // Проверка поддержки Range запросов
+        async function checkRangeSupport(recordingUrl, pathName, segmentStart, duration, playerContainer) {
+            try {
+                const response = await fetch(recordingUrl, {
+                    method: 'HEAD'
+                });
+
+                const supportsRange = response.headers.has('accept-ranges') && 
+                                    response.headers.get('accept-ranges') !== 'none';
+                const contentLength = response.headers.get('content-length');
+                
+                displayPlayer(recordingUrl, pathName, segmentStart, duration, playerContainer, supportsRange, contentLength);
+            } catch (error) {
+                // Если HEAD запрос не сработал, пробуем GET и выводим HTML плеер
+                displayPlayer(recordingUrl, pathName, segmentStart, duration, playerContainer, false, null);
+            }
+        }
+
+        // Отображение плеера с диагностикой
+        function displayPlayer(recordingUrl, pathName, segmentStart, duration, playerContainer, supportsRange, contentLength) {
+            let rangeStatus = '❌ Range не поддерживается';
+            let rangeColor = '#c62828';
+            
+            if (supportsRange) {
+                rangeStatus = '✓ Range поддерживается';
+                rangeColor = '#2e7d32';
+            }
+
+            const sizeStr = contentLength ? ` (${formatBytes(parseInt(contentLength))})` : '';
+
+            playerContainer.innerHTML = `
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
+                    <div>
+                        <strong>${escapeHtml(pathName)}</strong><br>
+                        <small style="color: #666;">${escapeHtml(segmentStart)}</small><br>
+                        <small style="color: #999;">Длина: ${Math.floor(duration)}с${sizeStr}</small><br>
+                        <small style="color: ${rangeColor};">${rangeStatus}</small>
+                    </div>
+                    <button onclick="closePlayer()" style="background: #333; color: white; border: none; padding: 5px 10px; cursor: pointer; flex-shrink: 0;">✕</button>
+                </div>
+                <div class="custom-player">
+                    <video id="player-video" class="player-video"></video>
+                    <div class="player-controls">
+                        <div class="progress-container">
+                            <div class="progress-bar" id="progress-bar">
+                                <div class="progress-fill" id="progress-fill"></div>
+                                <div class="progress-hover" id="progress-hover"></div>
+                            </div>
+                        </div>
+                        <div class="control-buttons">
+                            <button class="control-btn" id="play-btn" onclick="togglePlay()" title="Play/Pause">▶</button>
+                            <div class="time-display"><span id="current-time">0:00</span> / <span id="total-time">${formatTime(duration)}</span></div>
+                            <div class="volume-control">
+                                <button class="control-btn" id="volume-btn" onclick="toggleMute()" title="Mute">🔊</button>
+                                <input type="range" id="volume-slider" class="volume-slider" min="0" max="100" value="70" onchange="changeVolume(this.value)">
+                            </div>
+                            <div class="loading-indicator" id="loading-indicator"></div>
+                        </div>
+                    </div>
+                </div>
+                ${!supportsRange ? '<div style="background: #fff3cd; border: 1px solid #ffc107; padding: 10px; margin: 10px 0; border-radius: 3px; color: #856404;"><strong>⚠️ Внимание:</strong> Сервер не поддерживает HTTP Range запросы. Перемотка будет медленнее.</div>' : ''}
+                <div style="font-size: 0.75em; color: #999; word-break: break-all;">
+                    <details>
+                        <summary>URL и диагностика</summary>
+                        <code style="display: block; margin-top: 5px; padding: 5px; background: #f0f0f0;">${recordingUrl}</code>
+                        <div style="margin-top: 5px; padding: 5px; background: #f5f5f5; border-radius: 3px;">
+                            <div>Accept-Ranges: ${supportsRange ? 'bytes' : 'none'}</div>
+                            <div>Content-Length: ${contentLength ? contentLength + ' bytes' : 'не определена'}</div>
+                        </div>
+                    </details>
+                </div>
+            `;
+
+            // Инициализируем кастомный плеер
+            initCustomPlayer(recordingUrl, duration);
+
+            // Создаём оверлей
+            let overlay = document.getElementById('player-overlay');
+            if (!overlay) {
+                overlay = document.createElement('div');
+                overlay.id = 'player-overlay';
+                overlay.style.cssText = `
+                    position: fixed;
+                    top: 0;
+                    left: 0;
+                    right: 0;
+                    bottom: 0;
+                    background: rgba(0, 0, 0, 0.7);
+                    z-index: 999;
+                `;
+                overlay.onclick = closePlayer;
+                document.body.appendChild(overlay);
+            }
+        }
+
+        // Закрытие плеера
+        function closePlayer() {
+            const playerContainer = document.getElementById('player-container');
+            const overlay = document.getElementById('player-overlay');
+            if (playerContainer) playerContainer.remove();
+            if (overlay) overlay.remove();
+            
+            // Очищаем глобальное состояние плеера
+            window.playerState = null;
+        }
+
+        // Форматирование времени
+        function formatTime(seconds) {
+            const h = Math.floor(seconds / 3600);
+            const m = Math.floor((seconds % 3600) / 60);
+            const s = Math.floor(seconds % 60);
+            
+            if (h > 0) {
+                return `${h}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
+            }
+            return `${m}:${String(s).padStart(2, '0')}`;
+        }
+
+        // Инициализация кастомного плеера
+        function initCustomPlayer(recordingUrl, totalDuration) {
+            const video = document.getElementById('player-video');
+            const progressBar = document.getElementById('progress-bar');
+            const progressFill = document.getElementById('progress-fill');
+            const progressHover = document.getElementById('progress-hover');
+            const currentTimeDisplay = document.getElementById('current-time');
+            const playBtn = document.getElementById('play-btn');
+            const loadingIndicator = document.getElementById('loading-indicator');
+
+            // Сохраняем исходные параметры запроса
+            const urlParams = new URL(recordingUrl);
+            const pathParam = urlParams.searchParams.get('path');
+            const startParam = urlParams.searchParams.get('start');
+            const playbackUrl = document.getElementById('playbackUrl').value.trim();
+
+            window.playerState = {
+                recordingUrl,
+                totalDuration,
+                currentTime: 0,
+                isPlaying: false,
+                volume: 0.7,
+                video,
+                pathParam,
+                startParam,
+                playbackUrl,
+                isSeeking: false,
+                chunkSize: 120, // размер чанка в секундах
+                baseTime: 0 // время начала текущего чанка
+            };
+
+            video.volume = 0.7;
+
+            // Удаляем старые обработчики (на случай переинициализации)
+            video.removeEventListener('timeupdate', window.timeUpdateHandler);
+            video.removeEventListener('play', window.playHandler);
+            video.removeEventListener('pause', window.pauseHandler);
+            video.removeEventListener('ended', window.endedHandler);
+
+            // Обновление прогресса при воспроизведении
+            window.timeUpdateHandler = () => {
+                const absoluteTime = window.playerState.baseTime + video.currentTime;
+                const progress = (absoluteTime / totalDuration) * 100;
+                progressFill.style.width = progress + '%';
+                currentTimeDisplay.textContent = formatTime(absoluteTime);
+                window.playerState.currentTime = absoluteTime;
+
+                // Загружаем следующий чанк если близко к концу текущего
+                if (video.currentTime > window.playerState.chunkSize - 10 && 
+                    window.playerState.baseTime + window.playerState.chunkSize < totalDuration &&
+                    !window.playerState.isSeeking) {
+                    console.log('Loading next chunk at', formatTime(absoluteTime));
+                    loadNextChunk();
+                }
+            };
+
+            // Обработчик play
+            window.playHandler = () => {
+                window.playerState.isPlaying = true;
+                playBtn.textContent = '⏸';
+            };
+
+            // Обработчик pause
+            window.pauseHandler = () => {
+                window.playerState.isPlaying = false;
+                playBtn.textContent = '▶';
+            };
+
+            // Обработчик конца видео
+            window.endedHandler = () => {
+                // Если это не последний чанк, загружаем следующий
+                if (window.playerState.baseTime + window.playerState.chunkSize < totalDuration) {
+                    console.log('Current chunk ended, loading next');
+                    loadNextChunk();
+                } else {
+                    window.playerState.isPlaying = false;
+                    playBtn.textContent = '▶';
+                }
+            };
+
+            video.addEventListener('timeupdate', window.timeUpdateHandler);
+            video.addEventListener('play', window.playHandler);
+            video.addEventListener('pause', window.pauseHandler);
+            video.addEventListener('ended', window.endedHandler);
+
+            // Обработка загрузки видео
+            video.addEventListener('loadstart', () => {
+                loadingIndicator.classList.add('show');
+            });
+
+            video.addEventListener('canplay', () => {
+                loadingIndicator.classList.remove('show');
+            });
+
+            // Обработка перемотки по прогресс-бару
+            progressBar.addEventListener('click', (e) => {
+                const rect = progressBar.getBoundingClientRect();
+                const percent = (e.clientX - rect.left) / rect.width;
+                const newTime = percent * totalDuration;
+                seekToTime(newTime);
+            });
+
+            // Наведение на прогресс-бар
+            progressBar.addEventListener('mousemove', (e) => {
+                const rect = progressBar.getBoundingClientRect();
+                const percent = (e.clientX - rect.left) / rect.width;
+                progressHover.style.width = (percent * 100) + '%';
+            });
+
+            progressBar.addEventListener('mouseleave', () => {
+                progressHover.style.width = '0%';
+            });
+
+            // Установка начального видео
+            video.src = recordingUrl;
+        }
+
+        // Загрузка следующего чанка
+        function loadNextChunk() {
+            if (!window.playerState) return;
+
+            const state = window.playerState;
+            const video = document.getElementById('player-video');
+
+            // Вычисляем новое время начала для следующего чанка
+            const newBaseTime = state.baseTime + state.chunkSize;
+            if (newBaseTime >= state.totalDuration) {
+                console.log('Already at end');
+                return;
+            }
+
+            // Парсим начальное время из исходного запроса
+            const originalStart = new Date(state.startParam);
+            const newStartTime = new Date(originalStart.getTime() + newBaseTime * 1000);
+            const newStartISO = newStartTime.toISOString();
+
+            // Получаем оставшееся время до конца записи
+            const remainingTime = state.totalDuration - newBaseTime;
+            const chunkDuration = Math.min(state.chunkSize, remainingTime);
+
+            // Формируем URL для следующего чанка
+            const newUrl = `${state.playbackUrl}/get?path=${encodeURIComponent(state.pathParam)}&start=${encodeURIComponent(newStartISO)}&duration=${chunkDuration}&format=mp4`;
+
+            console.log('Loading next chunk at', formatTime(newBaseTime), 'URL:', newUrl);
+
+            const loadingIndicator = document.getElementById('loading-indicator');
+            loadingIndicator.classList.add('show');
+
+            // Запоминаем был ли плеер включен
+            const wasPlaying = state.isPlaying;
+
+            // Загружаем новый чанк
+            video.src = newUrl;
+            video.load();
+
+            // Обновляем базовое время
+            state.baseTime = newBaseTime;
+
+            // Возобновляем воспроизведение если оно было
+            const canPlayHandler = () => {
+                console.log('Next chunk loaded, resuming');
+                loadingIndicator.classList.remove('show');
+                if (wasPlaying) {
+                    video.play().catch(err => console.error('Play error:', err));
+                }
+                video.removeEventListener('canplay', canPlayHandler);
+            };
+
+            video.addEventListener('canplay', canPlayHandler);
+        }
+
+        // Перемотка к определённому времени через API запрос
+        async function seekToTime(time) {
+            if (!window.playerState) return;
+            
+            const state = window.playerState;
+            const video = document.getElementById('player-video');
+            const loadingIndicator = document.getElementById('loading-indicator');
+            
+            // Парсим начальное время из исходного запроса
+            const originalStart = new Date(state.startParam);
+            const offsetSeconds = Math.floor(time);
+            
+            // Вычисляем новое время начала (добавляем offset к оригинальному времени)
+            const newStartTime = new Date(originalStart.getTime() + offsetSeconds * 1000);
+            const newStartISO = newStartTime.toISOString();
+            
+            // Получаем оставшееся время до конца записи
+            const remainingTime = state.totalDuration - time;
+            const chunkDuration = Math.min(state.chunkSize, remainingTime);
+            
+            // Формируем новый URL для запроса диапазона
+            const newUrl = `${state.playbackUrl}/get?path=${encodeURIComponent(state.pathParam)}&start=${encodeURIComponent(newStartISO)}&duration=${chunkDuration}&format=mp4`;
+            
+            console.log('Seeking to:', formatTime(time), 'New URL:', newUrl);
+            
+            loadingIndicator.classList.add('show');
+            window.playerState.isSeeking = true;
+            
+            try {
+                // Останавливаем текущее воспроизведение
+                video.pause();
+                
+                // Устанавливаем новый источник видео
+                video.src = newUrl;
+                
+                // Обновляем базовое время
+                state.baseTime = Math.floor(time);
+                
+                // Ждём, пока видео загружается
+                const loadHandler = () => {
+                    console.log('Video loaded after seek, can play now');
+                    loadingIndicator.classList.remove('show');
+                    window.playerState.isSeeking = false;
+                    
+                    // Если плеер был в режиме воспроизведения, продолжаем
+                    if (window.playerState.isPlaying) {
+                        console.log('Resuming playback after seek');
+                        video.play().catch(err => console.error('Play error:', err));
+                    }
+                    
+                    // Удаляем обработчик после использования
+                    video.removeEventListener('canplay', loadHandler);
+                };
+                
+                video.addEventListener('canplay', loadHandler);
+                
+                // Также загружаем видео явно
+                video.load();
+                
+            } catch (error) {
+                console.error('Error seeking:', error);
+                loadingIndicator.classList.remove('show');
+                window.playerState.isSeeking = false;
+            }
+        }
+
+        // Переключение play/pause
+        function togglePlay() {
+            if (window.playerState && window.playerState.isSeeking) return; // Не дают играть если выполняется seek
+            
+            const video = document.getElementById('player-video');
+            const playBtn = document.getElementById('play-btn');
+            
+            if (video.paused) {
+                video.play();
+                window.playerState.isPlaying = true;
+                playBtn.textContent = '⏸';
+            } else {
+                video.pause();
+                window.playerState.isPlaying = false;
+                playBtn.textContent = '▶';
+            }
+        }
+
+        // Изменение громкости
+        function changeVolume(value) {
+            const video = document.getElementById('player-video');
+            const volumeValue = value / 100;
+            video.volume = volumeValue;
+            if (window.playerState) {
+                window.playerState.volume = volumeValue;
+            }
+        }
+
+        // Переключение звука
+        function toggleMute() {
+            const video = document.getElementById('player-video');
+            const volumeBtn = document.getElementById('volume-btn');
+            const volumeSlider = document.getElementById('volume-slider');
+            
+            if (video.muted) {
+                video.muted = false;
+                volumeBtn.textContent = '🔊';
+                volumeSlider.value = (window.playerState ? window.playerState.volume : 0.7) * 100;
+            } else {
+                video.muted = true;
+                volumeBtn.textContent = '🔇';
+                volumeSlider.value = 0;
+            }
+        }
+
+        // Показать сообщение
+        function showMessage(text, type) {
+            const messageDiv = document.getElementById('message');
+            const className = type === 'error' ? 'error' : 'success';
+            messageDiv.innerHTML = `<div class="${className}">${escapeHtml(text)}</div>`;
+        }
+
+        // Экранирование HTML
+        function escapeHtml(text) {
+            const map = {
+                '&': '&amp;',
+                '<': '&lt;',
+                '>': '&gt;',
+                '"': '&quot;',
+                "'": '&#039;'
+            };
+            return String(text).replace(/[&<>"']/g, m => map[m]);
+        }
+
+        // Обработка Enter в input
+        document.getElementById('apiUrl').addEventListener('keypress', function(event) {
+            if (event.key === 'Enter') {
+                loadPaths();
+            }
+        });
+
+        document.getElementById('playbackUrl').addEventListener('keypress', function(event) {
+            if (event.key === 'Enter') {
+                loadPaths();
+            }
+        });
+
+        // Загружаем пути при загрузке страницы
+        window.addEventListener('load', function() {
+            // Можно автоматически загрузить при открытии
+            // loadPaths();
+        });
+    </script>
+</body>
+</html>
