@@ -1,10 +1,11 @@
 <!DOCTYPE html>
 <html lang="ru">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>MediaMTX - Управление путями</title>
-    <style>
+	<meta charset="UTF-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1.0">
+	<title>MediaMTX - Управление путями</title>
+	<link rel="stylesheet" href="https://vjs.zencdn.net/8.12.0/video-js.css">
+	<style>
         * {
             margin: 0;
             padding: 0;
@@ -239,127 +240,13 @@
             background-color: rgba(255, 255, 255, 0.5);
         }
 
-        .vjs-default-skin .vjs-time-tooltip {
-            background-color: rgba(0, 0, 0, 0.9);
-            color: white;
-            padding: 3px 6px;
-            border-radius: 3px;
-            font-size: 12px;
-        }
-
-        /* Кастомный плеер */
-        .custom-player {
-            background: #000;
-            border-radius: 3px;
-            overflow: hidden;
-        }
-
-        .player-video {
-            width: 100%;
-            height: auto;
-            display: block;
-            background: #000;
-        }
-
-        .player-controls {
-            background: rgba(0, 0, 0, 0.9);
-            padding: 10px;
-            color: white;
-            font-size: 14px;
-        }
-
-        .progress-container {
-            display: flex;
-            align-items: center;
-            gap: 10px;
-            margin-bottom: 8px;
-        }
-
-        .progress-bar {
-            flex: 1;
-            height: 6px;
-            background: rgba(255, 255, 255, 0.3);
-            border-radius: 3px;
-            cursor: pointer;
-            position: relative;
-        }
-
-        .progress-fill {
-            height: 100%;
-            background: #ff0000;
-            border-radius: 3px;
-            width: 0%;
-            transition: width 0.1s;
-        }
-
-        .progress-hover {
-            position: absolute;
-            height: 100%;
-            background: rgba(255, 255, 255, 0.5);
-            border-radius: 3px;
-            pointer-events: none;
-        }
-
-        .control-buttons {
-            display: flex;
-            align-items: center;
-            gap: 10px;
-        }
-
-        .control-btn {
-            background: none;
-            border: none;
-            color: white;
-            cursor: pointer;
-            font-size: 16px;
-            padding: 5px 10px;
-            border-radius: 3px;
-            transition: background 0.2s;
-        }
-
-        .control-btn:hover {
-            background: rgba(255, 255, 255, 0.1);
-        }
-
-        .control-btn:active {
-            background: rgba(255, 255, 255, 0.2);
-        }
-
-        .time-display {
-            font-size: 12px;
-            color: #aaa;
-            min-width: 100px;
-            text-align: right;
-        }
-
-        .volume-control {
-            display: flex;
-            align-items: center;
-            gap: 5px;
-        }
-
-        .volume-slider {
-            width: 50px;
-            cursor: pointer;
-        }
-
-        .loading-indicator {
-            display: none;
-            width: 20px;
-            height: 20px;
-            border: 2px solid rgba(255, 255, 255, 0.3);
-            border-top-color: white;
-            border-radius: 50%;
-            animation: spin 1s linear infinite;
-        }
-
-        .loading-indicator.show {
-            display: inline-block;
-        }
-
-        @keyframes spin {
-            to { transform: rotate(360deg); }
-        }
+	        .vjs-default-skin .vjs-time-tooltip {
+	            background-color: rgba(0, 0, 0, 0.9);
+	            color: white;
+	            padding: 3px 6px;
+	            border-radius: 3px;
+	            font-size: 12px;
+	        }
 
         @media (max-width: 768px) {
             .paths-grid {
@@ -398,13 +285,14 @@
             <button onclick="loadPaths()">Загрузить пути</button>
         </div>
 
-        <div id="message"></div>
-        <div id="content"></div>
-    </div>
+	        <div id="message"></div>
+	        <div id="content"></div>
+	    </div>
 
-    <script>
-        // Загрузка путей с API
-        async function loadPaths() {
+	    <script src="https://vjs.zencdn.net/8.12.0/video.min.js"></script>
+	    <script>
+	        // Загрузка путей с API
+	        async function loadPaths() {
             const apiUrl = document.getElementById('apiUrl').value.trim();
             const contentDiv = document.getElementById('content');
             const messageDiv = document.getElementById('message');
@@ -629,21 +517,31 @@
                     <div class="segment-item"
                          data-start="${escapeHtml(start)}"
                          data-end="${escapeHtml(end)}"
+                         data-duration="${duration}"
                          style="cursor: pointer;">
-                        🔗 ${escapeHtml(start)}${endStr} ${durationStr}
+                        ⏯️ ${escapeHtml(start)}${endStr} ${durationStr}
                     </div>
                 `;
             }
 
             container.innerHTML = html;
 
-            // По клику открываем ссылку вида /list?path=...&start=...&end=...
+            // По клику открываем запись в плеере
             const items = container.querySelectorAll('.segment-item');
             for (const el of items) {
                 el.addEventListener('click', () => {
                     const start = el.getAttribute('data-start') || '';
                     const end = el.getAttribute('data-end') || '';
-                    openPlaybackRecordingListUrl(playbackUrl, pathName, start, end);
+                    let duration = Number(el.getAttribute('data-duration') || 0);
+                    if ((!Number.isFinite(duration) || duration <= 0) && start && end) {
+                        const startDate = new Date(start);
+                        const endDate = new Date(end);
+                        if (!Number.isNaN(startDate.getTime()) && !Number.isNaN(endDate.getTime())) {
+                            duration = Math.max(1, (endDate.getTime() - startDate.getTime()) / 1000);
+                        }
+                    }
+                    if (!Number.isFinite(duration) || duration <= 0) duration = 3600;
+                    playRecording(pathName, start, duration);
                 });
             }
         }
@@ -675,31 +573,26 @@
                 const segmentEnd = computeEndIso(segmentStart, duration);
                 html += `
                     <div class="segment-item"
-                        data-path="${escapeHtml(data.name)}"
-                        data-start="${escapeHtml(segmentStart)}"
-                        data-end="${escapeHtml(segmentEnd)}"
-                        data-duration="${duration}"
-                        style="cursor: pointer;">
-                        🔗 ${escapeHtml(segmentStart)}
+                         data-path="${escapeHtml(data.name)}"
+                         data-start="${escapeHtml(segmentStart)}"
+                         data-end="${escapeHtml(segmentEnd)}"
+                         data-duration="${duration}"
+                         style="cursor: pointer;">
+                        ⏯️ ${escapeHtml(segmentStart)}
                     </div>
                 `;
             }
 
             container.innerHTML = html;
 
-            // Если есть playbackUrl, открываем /list?..., иначе оставляем старое поведение (плеер)
+            // По клику открываем запись в плеере
             const items = container.querySelectorAll('.segment-item');
             for (const el of items) {
                 el.addEventListener('click', () => {
                     const pathName = el.getAttribute('data-path') || '';
                     const start = el.getAttribute('data-start') || '';
-                    const end = el.getAttribute('data-end') || '';
                     const duration = Number(el.getAttribute('data-duration') || 0);
-                    if (playbackUrl) {
-                        openPlaybackRecordingListUrl(playbackUrl, pathName, start, end);
-                    } else {
-                        playRecording(pathName, start, duration);
-                    }
+                    playRecording(pathName, start, duration);
                 });
             }
         }
@@ -763,18 +656,18 @@
         }
 
         // Воспроизведение записи
-        function playRecording(pathName, segmentStart, duration) {
-            const playbackUrl = document.getElementById('playbackUrl').value.trim();
+	        function playRecording(pathName, segmentStart, duration) {
+	            const playbackUrl = document.getElementById('playbackUrl').value.trim();
             
             if (!playbackUrl) {
                 alert('Пожалуйста, введите URL Playback сервера');
                 return;
             }
             
-            // URL для воспроизведения записи - используем format=mp4 для полной загрузки
-            // Берём чуть больше длительность для уверенности в полной записи
-            const safeDuration = Math.ceil(duration) + 10;
-            const recordingUrl = `${playbackUrl}/get?path=${encodeURIComponent(pathName)}&start=${encodeURIComponent(segmentStart)}&duration=${safeDuration}&format=mp4`;
+	            // URL для воспроизведения записи - используем format=mp4 для полной загрузки
+	            // Берём чуть больше длительность для уверенности в полной записи
+	            const safeDuration = Math.ceil(duration) + 10;
+	            const recordingUrl = `${playbackUrl}/get?path=${encodeURIComponent(pathName)}&start=${encodeURIComponent(segmentStart)}&duration=${safeDuration}&format=mp4`;
             
             // Ищем или создаём плеер
             let playerContainer = document.getElementById('player-container');
@@ -798,92 +691,50 @@
                     overflow-y: auto;
                 `;
                 document.body.appendChild(playerContainer);
-            }
+	            }
 
-            // Проверяем поддержку Range запросов
-            checkRangeSupport(recordingUrl, pathName, segmentStart, duration, playerContainer);
-        }
+	            // Без проверки Range (сразу открываем плеер)
+	            displayPlayer(recordingUrl, pathName, segmentStart, safeDuration, playerContainer, null, null);
+	        }
 
-        // Проверка поддержки Range запросов
-        async function checkRangeSupport(recordingUrl, pathName, segmentStart, duration, playerContainer) {
-            try {
-                const response = await fetch(recordingUrl, {
-                    method: 'HEAD'
-                });
+	        // Отображение плеера с диагностикой
+	        function displayPlayer(recordingUrl, pathName, segmentStart, duration, playerContainer, supportsRange, contentLength) {
+	            if (window.vjsPlayer) {
+	                window.vjsPlayer.dispose();
+	                window.vjsPlayer = null;
+	            }
 
-                const supportsRange = response.headers.has('accept-ranges') && 
-                                    response.headers.get('accept-ranges') !== 'none';
-                const contentLength = response.headers.get('content-length');
-                
-                displayPlayer(recordingUrl, pathName, segmentStart, duration, playerContainer, supportsRange, contentLength);
-            } catch (error) {
-                // Если HEAD запрос не сработал, пробуем GET и выводим HTML плеер
-                displayPlayer(recordingUrl, pathName, segmentStart, duration, playerContainer, false, null);
-            }
-        }
+	            const sizeStr = contentLength ? ` (${formatBytes(parseInt(contentLength))})` : '';
 
-        // Отображение плеера с диагностикой
-        function displayPlayer(recordingUrl, pathName, segmentStart, duration, playerContainer, supportsRange, contentLength) {
-            let rangeStatus = '❌ Range не поддерживается';
-            let rangeColor = '#c62828';
-            
-            if (supportsRange) {
-                rangeStatus = '✓ Range поддерживается';
-                rangeColor = '#2e7d32';
-            }
+	            playerContainer.innerHTML = `
+	                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
+	                    <div>
+	                        <strong>${escapeHtml(pathName)}</strong><br>
+	                        <small style="color: #666;">${escapeHtml(segmentStart)}</small><br>
+	                        <small style="color: #999;">Длина: ${formatTime(duration)}${sizeStr}</small>
+	                    </div>
+	                    <button onclick="closePlayer()" style="background: #333; color: white; border: none; padding: 5px 10px; cursor: pointer; flex-shrink: 0;">✕</button>
+	                </div>
+	                <video id="player-video" class="video-js vjs-default-skin vjs-big-play-centered" controls preload="auto" playsinline></video>
+	                <div style="font-size: 0.75em; color: #999; word-break: break-all;">
+	                    <details>
+	                        <summary>URL и диагностика</summary>
+	                        <code style="display: block; margin-top: 5px; padding: 5px; background: #f0f0f0;">${recordingUrl}</code>
+	                    </details>
+	                </div>
+	            `;
 
-            const sizeStr = contentLength ? ` (${formatBytes(parseInt(contentLength))})` : '';
+	            window.vjsPlayer = videojs('player-video', {
+	                controls: true,
+	                preload: 'auto',
+	                fluid: true,
+	            });
+	            initChunkedVideoJs(window.vjsPlayer, recordingUrl, duration);
 
-            playerContainer.innerHTML = `
-                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
-                    <div>
-                        <strong>${escapeHtml(pathName)}</strong><br>
-                        <small style="color: #666;">${escapeHtml(segmentStart)}</small><br>
-                        <small style="color: #999;">Длина: ${Math.floor(duration)}с${sizeStr}</small><br>
-                        <small style="color: ${rangeColor};">${rangeStatus}</small>
-                    </div>
-                    <button onclick="closePlayer()" style="background: #333; color: white; border: none; padding: 5px 10px; cursor: pointer; flex-shrink: 0;">✕</button>
-                </div>
-                <div class="custom-player">
-                    <video id="player-video" class="player-video"></video>
-                    <div class="player-controls">
-                        <div class="progress-container">
-                            <div class="progress-bar" id="progress-bar">
-                                <div class="progress-fill" id="progress-fill"></div>
-                                <div class="progress-hover" id="progress-hover"></div>
-                            </div>
-                        </div>
-                        <div class="control-buttons">
-                            <button class="control-btn" id="play-btn" onclick="togglePlay()" title="Play/Pause">▶</button>
-                            <div class="time-display"><span id="current-time">0:00</span> / <span id="total-time">${formatTime(duration)}</span></div>
-                            <div class="volume-control">
-                                <button class="control-btn" id="volume-btn" onclick="toggleMute()" title="Mute">🔊</button>
-                                <input type="range" id="volume-slider" class="volume-slider" min="0" max="100" value="70" onchange="changeVolume(this.value)">
-                            </div>
-                            <div class="loading-indicator" id="loading-indicator"></div>
-                        </div>
-                    </div>
-                </div>
-                ${!supportsRange ? '<div style="background: #fff3cd; border: 1px solid #ffc107; padding: 10px; margin: 10px 0; border-radius: 3px; color: #856404;"><strong>⚠️ Внимание:</strong> Сервер не поддерживает HTTP Range запросы. Перемотка будет медленнее.</div>' : ''}
-                <div style="font-size: 0.75em; color: #999; word-break: break-all;">
-                    <details>
-                        <summary>URL и диагностика</summary>
-                        <code style="display: block; margin-top: 5px; padding: 5px; background: #f0f0f0;">${recordingUrl}</code>
-                        <div style="margin-top: 5px; padding: 5px; background: #f5f5f5; border-radius: 3px;">
-                            <div>Accept-Ranges: ${supportsRange ? 'bytes' : 'none'}</div>
-                            <div>Content-Length: ${contentLength ? contentLength + ' bytes' : 'не определена'}</div>
-                        </div>
-                    </details>
-                </div>
-            `;
-
-            // Инициализируем кастомный плеер
-            initCustomPlayer(recordingUrl, duration);
-
-            // Создаём оверлей
-            let overlay = document.getElementById('player-overlay');
-            if (!overlay) {
-                overlay = document.createElement('div');
+	            // Создаём оверлей
+	            let overlay = document.getElementById('player-overlay');
+	            if (!overlay) {
+	                overlay = document.createElement('div');
                 overlay.id = 'player-overlay';
                 overlay.style.cssText = `
                     position: fixed;
@@ -900,316 +751,243 @@
         }
 
         // Закрытие плеера
-        function closePlayer() {
-            const playerContainer = document.getElementById('player-container');
-            const overlay = document.getElementById('player-overlay');
-            if (playerContainer) playerContainer.remove();
-            if (overlay) overlay.remove();
-            
-            // Очищаем глобальное состояние плеера
-            window.playerState = null;
-        }
+	        function closePlayer() {
+	            const playerContainer = document.getElementById('player-container');
+	            const overlay = document.getElementById('player-overlay');
+	            if (window.vjsPlayer) {
+	                window.vjsPlayer.dispose();
+	                window.vjsPlayer = null;
+	            }
 
-        // Форматирование времени
-        function formatTime(seconds) {
-            const h = Math.floor(seconds / 3600);
-            const m = Math.floor((seconds % 3600) / 60);
-            const s = Math.floor(seconds % 60);
+	            if (playerContainer) playerContainer.remove();
+	            if (overlay) overlay.remove();
+	        }
+
+	        // Форматирование времени
+	        function formatTime(seconds) {
+	            const h = Math.floor(seconds / 3600);
+	            const m = Math.floor((seconds % 3600) / 60);
+	            const s = Math.floor(seconds % 60);
             
             if (h > 0) {
                 return `${h}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
             }
-            return `${m}:${String(s).padStart(2, '0')}`;
-        }
+	            return `${m}:${String(s).padStart(2, '0')}`;
+	        }
 
-        // Инициализация кастомного плеера
-        function initCustomPlayer(recordingUrl, totalDuration) {
-            const video = document.getElementById('player-video');
-            const progressBar = document.getElementById('progress-bar');
-            const progressFill = document.getElementById('progress-fill');
-            const progressHover = document.getElementById('progress-hover');
-            const currentTimeDisplay = document.getElementById('current-time');
-            const playBtn = document.getElementById('play-btn');
-            const loadingIndicator = document.getElementById('loading-indicator');
+	        function parseRfc3339ToEpochNs(value) {
+	            if (!value) return null;
 
-            // Сохраняем исходные параметры запроса
-            const urlParams = new URL(recordingUrl);
-            const pathParam = urlParams.searchParams.get('path');
-            const startParam = urlParams.searchParams.get('start');
-            const playbackUrl = document.getElementById('playbackUrl').value.trim();
+	            const str = String(value).trim();
+	            const m = str.match(/^(\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d)(?:\.(\d+))?(Z|[+-]\d\d:\d\d)?$/);
+	            if (!m) return null;
 
-            window.playerState = {
-                recordingUrl,
-                totalDuration,
-                currentTime: 0,
-                isPlaying: false,
-                volume: 0.7,
-                video,
-                pathParam,
-                startParam,
-                playbackUrl,
-                isSeeking: false,
-                chunkSize: 120, // размер чанка в секундах
-                baseTime: 0 // время начала текущего чанка
-            };
+	            const base = m[1];
+	            const fracRaw = m[2] || '';
+	            const tz = m[3] || 'Z';
 
-            video.volume = 0.7;
+	            // Парсим без дробной части (точность до секунды), а дробь добавляем сами (BigInt наносекунды).
+	            const baseDate = new Date(`${base}${tz}`);
+	            if (Number.isNaN(baseDate.getTime())) return null;
 
-            // Удаляем старые обработчики (на случай переинициализации)
-            video.removeEventListener('timeupdate', window.timeUpdateHandler);
-            video.removeEventListener('play', window.playHandler);
-            video.removeEventListener('pause', window.pauseHandler);
-            video.removeEventListener('ended', window.endedHandler);
+	            const fracDigits = fracRaw.length;
+	            const frac9 = fracRaw ? fracRaw.padEnd(9, '0').slice(0, 9) : '0'.padStart(9, '0');
+	            const fracNs = BigInt(frac9);
+	            const epochNs = BigInt(baseDate.getTime()) * 1000000n + fracNs;
 
-            // Обновление прогресса при воспроизведении
-            window.timeUpdateHandler = () => {
-                const absoluteTime = window.playerState.baseTime + video.currentTime;
-                const progress = (absoluteTime / totalDuration) * 100;
-                progressFill.style.width = progress + '%';
-                currentTimeDisplay.textContent = formatTime(absoluteTime);
-                window.playerState.currentTime = absoluteTime;
+	            return { epochNs, fracDigits };
+	        }
 
-                // Загружаем следующий чанк если близко к концу текущего
-                if (video.currentTime > window.playerState.chunkSize - 10 && 
-                    window.playerState.baseTime + window.playerState.chunkSize < totalDuration &&
-                    !window.playerState.isSeeking) {
-                    console.log('Loading next chunk at', formatTime(absoluteTime));
-                    loadNextChunk();
-                }
-            };
+	        function epochNsToRfc3339Utc(epochNs, fracDigits) {
+	            const ns = BigInt(epochNs);
+	            const ms = Number(ns / 1000000n);
+	            const d = new Date(ms);
 
-            // Обработчик play
-            window.playHandler = () => {
-                window.playerState.isPlaying = true;
-                playBtn.textContent = '⏸';
-            };
+	            const yyyy = d.getUTCFullYear();
+	            const mm = String(d.getUTCMonth() + 1).padStart(2, '0');
+	            const dd = String(d.getUTCDate()).padStart(2, '0');
+	            const hh = String(d.getUTCHours()).padStart(2, '0');
+	            const mi = String(d.getUTCMinutes()).padStart(2, '0');
+	            const ss = String(d.getUTCSeconds()).padStart(2, '0');
+	            const base = `${yyyy}-${mm}-${dd}T${hh}:${mi}:${ss}`;
 
-            // Обработчик pause
-            window.pauseHandler = () => {
-                window.playerState.isPlaying = false;
-                playBtn.textContent = '▶';
-            };
+	            const digits = Math.max(0, Math.min(9, Number(fracDigits) || 0));
+	            if (digits === 0) return `${base}Z`;
 
-            // Обработчик конца видео
-            window.endedHandler = () => {
-                // Если это не последний чанк, загружаем следующий
-                if (window.playerState.baseTime + window.playerState.chunkSize < totalDuration) {
-                    console.log('Current chunk ended, loading next');
-                    loadNextChunk();
-                } else {
-                    window.playerState.isPlaying = false;
-                    playBtn.textContent = '▶';
-                }
-            };
+	            const remNs = ns % 1000000000n;
+	            const frac9 = remNs.toString().padStart(9, '0');
+	            const frac = frac9.slice(0, digits);
+	            return `${base}.${frac}Z`;
+	        }
 
-            video.addEventListener('timeupdate', window.timeUpdateHandler);
-            video.addEventListener('play', window.playHandler);
-            video.addEventListener('pause', window.pauseHandler);
-            video.addEventListener('ended', window.endedHandler);
+	        function buildPlaybackGetUrl(playbackUrl, pathParam, startIso, durationSeconds) {
+	            return `${playbackUrl}/get?path=${encodeURIComponent(pathParam)}&start=${encodeURIComponent(startIso)}&duration=${Math.ceil(durationSeconds)}&format=mp4`;
+	        }
 
-            // Обработка загрузки видео
-            video.addEventListener('loadstart', () => {
-                loadingIndicator.classList.add('show');
-            });
+	        function initChunkedVideoJs(player, recordingUrl, totalDuration) {
+	            const playbackUrlRaw = document.getElementById('playbackUrl').value.trim();
+	            const playbackUrl = playbackUrlRaw.replace(/\/+$/, '');
+	            const urlParams = new URL(recordingUrl);
+	            const pathParam = urlParams.searchParams.get('path') || '';
+	            const startParam = urlParams.searchParams.get('start') || '';
+	            const startParsed = parseRfc3339ToEpochNs(startParam);
+	            const startEpochNs = startParsed ? startParsed.epochNs : null;
+	            const startFracDigits = startParsed ? startParsed.fracDigits : 0;
 
-            video.addEventListener('canplay', () => {
-                loadingIndicator.classList.remove('show');
-            });
+	            const state = {
+	                playbackUrl,
+	                pathParam,
+	                startParam,
+	                startEpochNs,
+	                startFracDigits,
+	                totalDuration: Math.max(0, Number(totalDuration) || 0),
+	                chunkSize: 120,
+	                baseTime: 0,
+	                chunkDuration: 0,
+	                isLoading: false,
+	                pendingSeek: null,
+	                seekTimer: null,
+	                virtualTime: null,
+	            };
 
-            // Обработка перемотки по прогресс-бару
-            progressBar.addEventListener('click', (e) => {
-                const rect = progressBar.getBoundingClientRect();
-                const percent = (e.clientX - rect.left) / rect.width;
-                const newTime = percent * totalDuration;
-                seekToTime(newTime);
-            });
+	            const origCurrentTime = player.currentTime.bind(player);
+	            const origDuration = player.duration.bind(player);
 
-            // Наведение на прогресс-бар
-            progressBar.addEventListener('mousemove', (e) => {
-                const rect = progressBar.getBoundingClientRect();
-                const percent = (e.clientX - rect.left) / rect.width;
-                progressHover.style.width = (percent * 100) + '%';
-            });
+	            const setVirtualDuration = () => {
+	                try {
+	                    origDuration(state.totalDuration);
+	                    player.trigger('durationchange');
+	                } catch {
+	                    // ignore
+	                }
+	            };
 
-            progressBar.addEventListener('mouseleave', () => {
-                progressHover.style.width = '0%';
-            });
+	            const clampToTimeline = (value) => {
+	                const t = Math.max(0, Number(value) || 0);
+	                if (state.totalDuration <= 0) return 0;
+	                return Math.min(state.totalDuration - 0.01, t);
+	            };
 
-            // Установка начального видео
-            video.src = recordingUrl;
-        }
+	            const loadChunkAt = (absoluteSeconds, { autoplay = false, inChunkTime = 0 } = {}) => {
+	                if (!state.playbackUrl || !state.startEpochNs) {
+	                    player.src({ src: recordingUrl, type: 'video/mp4' });
+	                    setVirtualDuration();
+	                    return;
+	                }
 
-        // Загрузка следующего чанка
-        function loadNextChunk() {
-            if (!window.playerState) return;
+	                const abs = clampToTimeline(absoluteSeconds);
+	                const baseTime = Math.floor(abs);
+	                const startIso = baseTime === 0
+	                    ? state.startParam
+	                    : epochNsToRfc3339Utc(state.startEpochNs + BigInt(baseTime) * 1000000000n, state.startFracDigits);
+	                const remaining = state.totalDuration - baseTime;
+	                const chunkDuration = Math.min(state.chunkSize, Math.max(0, remaining));
+	                if (chunkDuration <= 0) return;
 
-            const state = window.playerState;
-            const video = document.getElementById('player-video');
+	                state.isLoading = true;
+	                state.virtualTime = abs;
+	                state.baseTime = baseTime;
+	                state.chunkDuration = chunkDuration;
 
-            // Вычисляем новое время начала для следующего чанка
-            const newBaseTime = state.baseTime + state.chunkSize;
-            if (newBaseTime >= state.totalDuration) {
-                console.log('Already at end');
-                return;
-            }
+	                const src = buildPlaybackGetUrl(state.playbackUrl, state.pathParam, startIso, chunkDuration);
+	                player.src({ src, type: 'video/mp4' });
 
-            // Парсим начальное время из исходного запроса
-            const originalStart = new Date(state.startParam);
-            const newStartTime = new Date(originalStart.getTime() + newBaseTime * 1000);
-            const newStartISO = newStartTime.toISOString();
+	                player.one('loadedmetadata', () => {
+	                    setVirtualDuration();
+	                    try {
+	                        origCurrentTime(Math.min(Math.max(0, Number(inChunkTime) || 0), Math.max(0, chunkDuration - 0.01)));
+	                    } catch {
+	                        // ignore
+	                    }
 
-            // Получаем оставшееся время до конца записи
-            const remainingTime = state.totalDuration - newBaseTime;
-            const chunkDuration = Math.min(state.chunkSize, remainingTime);
+	                    state.isLoading = false;
+	                    state.virtualTime = null;
 
-            // Формируем URL для следующего чанка
-            const newUrl = `${state.playbackUrl}/get?path=${encodeURIComponent(state.pathParam)}&start=${encodeURIComponent(newStartISO)}&duration=${chunkDuration}&format=mp4`;
+	                    if (autoplay) {
+	                        player.play().catch(() => {});
+	                    }
 
-            console.log('Loading next chunk at', formatTime(newBaseTime), 'URL:', newUrl);
+	                    if (state.pendingSeek != null) {
+	                        const pending = state.pendingSeek;
+	                        state.pendingSeek = null;
+	                        seekVirtual(pending);
+	                    }
+	                });
+	            };
 
-            const loadingIndicator = document.getElementById('loading-indicator');
-            loadingIndicator.classList.add('show');
+	            const scheduleSeek = (t) => {
+	                state.pendingSeek = t;
+	                state.virtualTime = t;
+	                if (state.seekTimer) clearTimeout(state.seekTimer);
+	                state.seekTimer = setTimeout(() => {
+	                    const target = state.pendingSeek;
+	                    state.pendingSeek = null;
+	                    if (target == null) return;
+	                    seekVirtual(target);
+	                }, 200);
+	            };
 
-            // Запоминаем был ли плеер включен
-            const wasPlaying = state.isPlaying;
+	            const seekVirtual = (t) => {
+	                const target = clampToTimeline(t);
+	                if (state.isLoading) {
+	                    state.pendingSeek = target;
+	                    state.virtualTime = target;
+	                    return target;
+	                }
+	                const autoplay = !player.paused();
+	                const baseTime = Math.floor(target);
+	                const inChunk = target - baseTime;
+	                loadChunkAt(target, { autoplay, inChunkTime: inChunk });
+	                return target;
+	            };
 
-            // Загружаем новый чанк
-            video.src = newUrl;
-            video.load();
+	            player.currentTime = function(t) {
+	                if (t === undefined) {
+	                    if (state.virtualTime != null) return state.virtualTime;
+	                    return state.baseTime + origCurrentTime();
+	                }
+	                scheduleSeek(t);
+	                return t;
+	            };
 
-            // Обновляем базовое время
-            state.baseTime = newBaseTime;
+	            player.duration = function(d) {
+	                if (d === undefined) return state.totalDuration;
+	                return origDuration(d);
+	            };
 
-            // Возобновляем воспроизведение если оно было
-            const canPlayHandler = () => {
-                console.log('Next chunk loaded, resuming');
-                loadingIndicator.classList.remove('show');
-                if (wasPlaying) {
-                    video.play().catch(err => console.error('Play error:', err));
-                }
-                video.removeEventListener('canplay', canPlayHandler);
-            };
+	            player.on('timeupdate', () => {
+	                if (state.isLoading) return;
+	                const abs = player.currentTime();
+	                const inChunk = abs - state.baseTime;
+	                const threshold = Math.max(0, state.chunkDuration - 10);
+	                if (state.chunkDuration > 0 && inChunk > threshold &&
+	                    state.baseTime + state.chunkDuration < state.totalDuration) {
+	                    const autoplay = !player.paused();
+	                    loadChunkAt(state.baseTime + state.chunkDuration, { autoplay, inChunkTime: 0 });
+	                }
+	            });
 
-            video.addEventListener('canplay', canPlayHandler);
-        }
+	            player.on('ended', () => {
+	                if (state.isLoading) return;
+	                if (state.baseTime + state.chunkDuration < state.totalDuration) {
+	                    loadChunkAt(state.baseTime + state.chunkDuration, { autoplay: true, inChunkTime: 0 });
+	                }
+	            });
 
-        // Перемотка к определённому времени через API запрос
-        async function seekToTime(time) {
-            if (!window.playerState) return;
-            
-            const state = window.playerState;
-            const video = document.getElementById('player-video');
-            const loadingIndicator = document.getElementById('loading-indicator');
-            
-            // Парсим начальное время из исходного запроса
-            const originalStart = new Date(state.startParam);
-            const offsetSeconds = Math.floor(time);
-            
-            // Вычисляем новое время начала (добавляем offset к оригинальному времени)
-            const newStartTime = new Date(originalStart.getTime() + offsetSeconds * 1000);
-            const newStartISO = newStartTime.toISOString();
-            
-            // Получаем оставшееся время до конца записи
-            const remainingTime = state.totalDuration - time;
-            const chunkDuration = Math.min(state.chunkSize, remainingTime);
-            
-            // Формируем новый URL для запроса диапазона
-            const newUrl = `${state.playbackUrl}/get?path=${encodeURIComponent(state.pathParam)}&start=${encodeURIComponent(newStartISO)}&duration=${chunkDuration}&format=mp4`;
-            
-            console.log('Seeking to:', formatTime(time), 'New URL:', newUrl);
-            
-            loadingIndicator.classList.add('show');
-            window.playerState.isSeeking = true;
-            
-            try {
-                // Останавливаем текущее воспроизведение
-                video.pause();
-                
-                // Устанавливаем новый источник видео
-                video.src = newUrl;
-                
-                // Обновляем базовое время
-                state.baseTime = Math.floor(time);
-                
-                // Ждём, пока видео загружается
-                const loadHandler = () => {
-                    console.log('Video loaded after seek, can play now');
-                    loadingIndicator.classList.remove('show');
-                    window.playerState.isSeeking = false;
-                    
-                    // Если плеер был в режиме воспроизведения, продолжаем
-                    if (window.playerState.isPlaying) {
-                        console.log('Resuming playback after seek');
-                        video.play().catch(err => console.error('Play error:', err));
-                    }
-                    
-                    // Удаляем обработчик после использования
-                    video.removeEventListener('canplay', loadHandler);
-                };
-                
-                video.addEventListener('canplay', loadHandler);
-                
-                // Также загружаем видео явно
-                video.load();
-                
-            } catch (error) {
-                console.error('Error seeking:', error);
-                loadingIndicator.classList.remove('show');
-                window.playerState.isSeeking = false;
-            }
-        }
+	            player.one('dispose', () => {
+	                if (state.seekTimer) clearTimeout(state.seekTimer);
+	            });
 
-        // Переключение play/pause
-        function togglePlay() {
-            if (window.playerState && window.playerState.isSeeking) return; // Не дают играть если выполняется seek
-            
-            const video = document.getElementById('player-video');
-            const playBtn = document.getElementById('play-btn');
-            
-            if (video.paused) {
-                video.play();
-                window.playerState.isPlaying = true;
-                playBtn.textContent = '⏸';
-            } else {
-                video.pause();
-                window.playerState.isPlaying = false;
-                playBtn.textContent = '▶';
-            }
-        }
+	            // Старт: первый чанк
+	            loadChunkAt(0, { autoplay: false, inChunkTime: 0 });
+	        }
 
-        // Изменение громкости
-        function changeVolume(value) {
-            const video = document.getElementById('player-video');
-            const volumeValue = value / 100;
-            video.volume = volumeValue;
-            if (window.playerState) {
-                window.playerState.volume = volumeValue;
-            }
-        }
-
-        // Переключение звука
-        function toggleMute() {
-            const video = document.getElementById('player-video');
-            const volumeBtn = document.getElementById('volume-btn');
-            const volumeSlider = document.getElementById('volume-slider');
-            
-            if (video.muted) {
-                video.muted = false;
-                volumeBtn.textContent = '🔊';
-                volumeSlider.value = (window.playerState ? window.playerState.volume : 0.7) * 100;
-            } else {
-                video.muted = true;
-                volumeBtn.textContent = '🔇';
-                volumeSlider.value = 0;
-            }
-        }
-
-        // Показать сообщение
-        function showMessage(text, type) {
-            const messageDiv = document.getElementById('message');
-            const className = type === 'error' ? 'error' : 'success';
-            messageDiv.innerHTML = `<div class="${className}">${escapeHtml(text)}</div>`;
-        }
+	        // Показать сообщение
+	        function showMessage(text, type) {
+	            const messageDiv = document.getElementById('message');
+	            const className = type === 'error' ? 'error' : 'success';
+	            messageDiv.innerHTML = `<div class="${className}">${escapeHtml(text)}</div>`;
+	        }
 
         // Экранирование HTML
         function escapeHtml(text) {
