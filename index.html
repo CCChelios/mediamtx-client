@@ -920,26 +920,48 @@
 		            const startEpochNs = startParsed ? startParsed.epochNs : null;
 		            const startFracDigits = startParsed ? startParsed.fracDigits : 0;
 
-			            const state = {
-			                playbackUrl,
-			                pathParam,
-			                startParam,
-			                startEpochNs,
-			                startFracDigits,
-			                totalDuration: Math.max(0, Number(totalDuration) || 0),
+		            const state = {
+		                playbackUrl,
+		                pathParam,
+		                startParam,
+		                startEpochNs,
+		                startFracDigits,
+		                totalDuration: Math.max(0, Number(totalDuration) || 0),
 		                chunkSize: 30,
 		                mediaSource: null,
 		                sourceBuffer: null,
 		                initSegment: null,
 		                nextBaseTime: 0,
 		                inflight: false,
+		                isSeeking: false,
+		                sbQueue: Promise.resolve(),
 		                generation: 0,
 		                seekDebounce: null,
 		                lastRequestedTime: null,
 		                suppressSeeking: false,
-			                internalSetTime: false,
-			                objectUrl: null,
-			            };
+		                internalSetTime: false,
+		                objectUrl: null,
+		            };
+
+			            function enqueueSourceBufferOp(fn) {
+			                const prev = state.sbQueue;
+			                const next = (async () => {
+			                    try {
+			                        await prev;
+			                    } catch {
+			                        // ignore
+			                    }
+			                    return await fn();
+			                })();
+			                state.sbQueue = next;
+			                return next;
+			            }
+
+			            async function waitSourceBufferIdle(sb) {
+			                while (sb.updating) {
+			                    await sourceBufferUpdateEnd(sb);
+			                }
+			            }
 
 			            function clamp(t) {
 			                const v = Math.max(0, Number(t) || 0);
@@ -978,10 +1000,10 @@
 
 			                    const target = clamp(t);
 			                    state.lastRequestedTime = target;
-			                    if (state.seekDebounce) clearTimeout(state.seekDebounce);
-			                    state.seekDebounce = setTimeout(() => {
-			                        handleSeek(state.lastRequestedTime);
-			                    }, 0);
+				                    if (state.seekDebounce) clearTimeout(state.seekDebounce);
+				                    state.seekDebounce = setTimeout(() => {
+				                        handleSeek(state.lastRequestedTime);
+				                    }, 200);
 
 			                    // Обновляем UI немедленно (Video.js), даже если фактический буфер догрузим чуть позже.
 			                    state.internalSetTime = true;
@@ -1095,111 +1117,134 @@
 		                }
 		            };
 
-		            const appendChunk = async (chunk) => {
-		                if (!chunk) return;
-		                if (!state.sourceBuffer) {
-		                    await ensureSourceBuffer(chunk.init);
-		                }
+			            const appendChunk = async (chunk) => {
+			                if (!chunk) return;
+			                if (!state.sourceBuffer) {
+			                    await ensureSourceBuffer(chunk.init);
+			                }
 
-		                const sb = state.sourceBuffer;
-		                if (!state.initSegment) {
-		                    state.initSegment = chunk.init;
-		                    sb.timestampOffset = 0;
-		                    await appendToSourceBuffer(sb, chunk.init);
-		                }
+			                const sb = state.sourceBuffer;
+			                if (!state.initSegment) {
+			                    state.initSegment = chunk.init;
+			                    await waitSourceBufferIdle(sb);
+			                    sb.timestampOffset = 0;
+			                    await appendToSourceBuffer(sb, chunk.init);
+			                }
 
-		                sb.timestampOffset = chunk.base;
-		                await appendToSourceBuffer(sb, chunk.media);
-		                state.nextBaseTime = chunk.base + Math.max(1, Math.floor(chunk.dur));
-		            };
+			                await waitSourceBufferIdle(sb);
+			                sb.timestampOffset = chunk.base;
+			                await appendToSourceBuffer(sb, chunk.media);
+			                state.nextBaseTime = chunk.base + Math.max(1, Math.floor(chunk.dur));
+			            };
 
-		            const pump = async () => {
-		                if (state.inflight) return;
-		                if (!state.sourceBuffer || !state.mediaSource) return;
-		                if (state.nextBaseTime >= state.totalDuration) return;
+			            const pump = async () => {
+			                if (state.inflight) return;
+			                if (state.isSeeking) return;
+			                if (!state.sourceBuffer || !state.mediaSource) return;
+			                if (state.nextBaseTime >= state.totalDuration) return;
 
 		                const current = player.currentTime();
 		                const bufferedEnd = getBufferedEnd(videoEl);
 		                const ahead = bufferedEnd - current;
 		                if (ahead > 20) return;
 
-		                state.inflight = true;
-		                const gen = state.generation;
-		                try {
-		                    const chunk = await fetchFmp4(state.nextBaseTime, gen);
-		                    if (gen !== state.generation || !chunk) return;
-		                    await appendChunk(chunk);
-		                } catch (e) {
-		                    console.error('MSE pump error:', e);
-		                } finally {
-		                    state.inflight = false;
-		                }
-		            };
+			                state.inflight = true;
+			                const gen = state.generation;
+			                try {
+			                    const chunk = await fetchFmp4(state.nextBaseTime, gen);
+			                    if (gen !== state.generation || !chunk) return;
+			                    await enqueueSourceBufferOp(() => appendChunk(chunk));
+			                } catch (e) {
+			                    console.error('MSE pump error:', e);
+			                } finally {
+			                    state.inflight = false;
+			                }
+			            };
 
-				            async function handleSeek(targetTime) {
-				                if (!state.mediaSource || !state.sourceBuffer) return;
-				                const t = clamp(targetTime);
-				                const base = Math.max(0, Math.floor(t));
-				                const inChunk = t - base;
+			            async function handleSeek(targetTime) {
+			                if (!state.mediaSource || !state.sourceBuffer) return;
+			                const t = clamp(targetTime);
+			                const base = Math.max(0, Math.floor(t));
+			                const inChunk = t - base;
 			                const wasPlaying = !player.paused();
 			                const gen = ++state.generation;
 			                state.inflight = false;
+			                state.isSeeking = true;
 
-		                try { player.pause(); } catch {}
-
-			                try { state.sourceBuffer.abort(); } catch {}
-
-			                // Точно очищаем только реально буферизованные диапазоны, иначе remove() может падать.
+			                let chunk = null;
 			                try {
-			                    const b = videoEl.buffered;
-			                    for (let i = 0; i < b.length; i++) {
-			                        const s = b.start(i);
-			                        const e = b.end(i);
-			                        if (e > s) {
-			                            await removeFromSourceBuffer(state.sourceBuffer, s, e);
-			                        }
-			                    }
+			                    chunk = await fetchFmp4(base, gen);
 			                } catch (e) {
-			                    console.warn('SourceBuffer range-remove failed:', e);
+			                    console.error('MSE seek fetch error:', e);
+			                    state.isSeeking = false;
+			                    return;
 			                }
 
-			                // Заново добавляем init сегмент (нужен для декодера).
-			                if (state.initSegment) {
-			                    try {
-			                        state.sourceBuffer.timestampOffset = 0;
-			                        await appendToSourceBuffer(state.sourceBuffer, state.initSegment);
-			                    } catch (e) {
-			                        console.warn('Re-append init failed:', e);
-			                    }
+			                if (gen !== state.generation || !chunk) {
+			                    state.isSeeking = false;
+			                    return;
 			                }
+
+			                try { player.pause(); } catch {}
 
 			                try {
-			                    const chunk = await fetchFmp4(base, gen);
-			                    if (gen !== state.generation || !chunk) return;
-			                    await appendChunk(chunk);
-		                    state.suppressSeeking = true;
-		                    state.internalSetTime = true;
-		                    try {
-		                        player.currentTime(base + inChunk);
-		                    } finally {
-		                        state.internalSetTime = false;
-		                    }
-		                    setTimeout(() => { state.suppressSeeking = false; }, 0);
-		                    if (wasPlaying) player.play().catch(() => {});
-				                } catch (e) {
-				                    console.error('MSE seek error:', e);
-				                }
-				            }
+			                    await enqueueSourceBufferOp(async () => {
+			                        const sb = state.sourceBuffer;
+			                        try { sb.abort(); } catch {}
 
-			            const onSeeking = () => {
-			                if (state.suppressSeeking) return;
-			                const t = player.currentTime();
-			                state.lastRequestedTime = t;
-			                if (state.seekDebounce) clearTimeout(state.seekDebounce);
-			                state.seekDebounce = setTimeout(() => {
-			                    handleSeek(state.lastRequestedTime);
-			                }, 200);
-			            };
+			                        // Чистим текущие буферы
+			                        try {
+			                            const b = videoEl.buffered;
+			                            for (let i = 0; i < b.length; i++) {
+			                                const s = b.start(i);
+			                                const e = b.end(i);
+			                                if (e > s) {
+			                                    await removeFromSourceBuffer(sb, s, e);
+			                                }
+			                            }
+			                        } catch (e) {
+			                            console.warn('SourceBuffer range-remove failed:', e);
+			                        }
+
+			                        // Заново init
+			                        if (state.initSegment) {
+			                            await waitSourceBufferIdle(sb);
+			                            sb.timestampOffset = 0;
+			                            await appendToSourceBuffer(sb, state.initSegment);
+			                        }
+
+			                        await appendChunk(chunk);
+			                    });
+			                } catch (e) {
+			                    console.error('MSE seek error:', e);
+			                    state.isSeeking = false;
+			                    return;
+			                }
+
+			                state.isSeeking = false;
+
+			                state.suppressSeeking = true;
+			                state.internalSetTime = true;
+			                try {
+			                    player.currentTime(base + inChunk);
+			                } finally {
+			                    state.internalSetTime = false;
+			                }
+			                setTimeout(() => { state.suppressSeeking = false; }, 0);
+			                if (wasPlaying) player.play().catch(() => {});
+			            }
+
+				            const onSeeking = () => {
+				                if (state.suppressSeeking) return;
+				                if (state.internalSetTime) return;
+				                if (state.isSeeking) return;
+				                const t = player.currentTime();
+				                state.lastRequestedTime = t;
+				                if (state.seekDebounce) clearTimeout(state.seekDebounce);
+				                state.seekDebounce = setTimeout(() => {
+				                    handleSeek(state.lastRequestedTime);
+				                }, 200);
+				            };
 
 			            player.on('timeupdate', pump);
 			            player.on('seeking', onSeeking);
@@ -1216,9 +1261,9 @@
 			                }
 			                if (state.objectUrl) {
 			                    try { URL.revokeObjectURL(state.objectUrl); } catch {}
-		                    state.objectUrl = null;
-		                }
-		            });
+			                    state.objectUrl = null;
+			                }
+			            });
 
 		            const mediaSource = new MediaSource();
 		            state.mediaSource = mediaSource;
