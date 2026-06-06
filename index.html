@@ -290,7 +290,8 @@
 	    </div>
 
 	    <script src="https://vjs.zencdn.net/8.12.0/video.min.js"></script>
-	    <script>
+		    <script src="https://cdn.jsdelivr.net/npm/mp4box@0.5.2/dist/mp4box.all.min.js"></script>
+		    <script>
 	        // Загрузка путей с API
 	        async function loadPaths() {
             const apiUrl = document.getElementById('apiUrl').value.trim();
@@ -664,10 +665,10 @@
                 return;
             }
             
-	            // URL для воспроизведения записи - используем format=mp4 для полной загрузки
+	            // URL для воспроизведения записи - используем format=fmp4 для MSE подгрузки сегментов
 	            // Берём чуть больше длительность для уверенности в полной записи
 	            const safeDuration = Math.ceil(duration) + 10;
-	            const recordingUrl = `${playbackUrl}/get?path=${encodeURIComponent(pathName)}&start=${encodeURIComponent(segmentStart)}&duration=${safeDuration}&format=mp4`;
+	            const recordingUrl = `${playbackUrl}/get?path=${encodeURIComponent(pathName)}&start=${encodeURIComponent(segmentStart)}&duration=${safeDuration}&format=fmp4`;
             
             // Ищем или создаём плеер
             let playerContainer = document.getElementById('player-container');
@@ -706,34 +707,47 @@
 
 	            const sizeStr = contentLength ? ` (${formatBytes(parseInt(contentLength))})` : '';
 
-	            playerContainer.innerHTML = `
-	                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
-	                    <div>
-	                        <strong>${escapeHtml(pathName)}</strong><br>
-	                        <small style="color: #666;">${escapeHtml(segmentStart)}</small><br>
-	                        <small style="color: #999;">Длина: ${formatTime(duration)}${sizeStr}</small>
-	                    </div>
-	                    <button onclick="closePlayer()" style="background: #333; color: white; border: none; padding: 5px 10px; cursor: pointer; flex-shrink: 0;">✕</button>
-	                </div>
-	                <video id="player-video" class="video-js vjs-default-skin vjs-big-play-centered" controls preload="auto" playsinline></video>
-	                <div style="font-size: 0.75em; color: #999; word-break: break-all;">
-	                    <details>
-	                        <summary>URL и диагностика</summary>
-	                        <code style="display: block; margin-top: 5px; padding: 5px; background: #f0f0f0;">${recordingUrl}</code>
-	                    </details>
-	                </div>
-	            `;
+		            playerContainer.innerHTML = `
+		                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
+		                    <div>
+		                        <strong>${escapeHtml(pathName)}</strong><br>
+		                        <small style="color: #666;">${escapeHtml(segmentStart)}</small><br>
+		                        <small style="color: #999;">Длина: ${formatTime(duration)}${sizeStr}</small>
+		                    </div>
+		                    <button onclick="closePlayer()" style="background: #333; color: white; border: none; padding: 5px 10px; cursor: pointer; flex-shrink: 0;">✕</button>
+		                </div>
+		                <video id="player-video" class="video-js vjs-default-skin vjs-big-play-centered" controls preload="auto" playsinline></video>
+		                <div style="font-size: 0.75em; color: #999; word-break: break-all;">
+		                    <details>
+		                        <summary>URL и диагностика</summary>
+		                        <div style="margin-top: 6px; display: flex; gap: 8px; flex-wrap: wrap; align-items: center;">
+		                            <button id="probe-fmp4-btn" type="button" data-url="${escapeHtml(recordingUrl)}" style="background: #333; color: white; border: none; padding: 5px 10px; cursor: pointer;">Проверить fMP4</button>
+		                            <small>Результат смотри в Console (F12)</small>
+		                        </div>
+		                        <code style="display: block; margin-top: 5px; padding: 5px; background: #f0f0f0;">${recordingUrl}</code>
+		                    </details>
+		                </div>
+		            `;
 
-	            window.vjsPlayer = videojs('player-video', {
-	                controls: true,
-	                preload: 'auto',
-	                fluid: true,
-	            });
-	            initChunkedVideoJs(window.vjsPlayer, recordingUrl, duration);
-	            window.vjsPlayer.on('error', () => {
-	                const err = window.vjsPlayer.error();
-	                console.error('Video.js error:', err, 'src:', window.vjsPlayer.currentSrc());
-	            });
+		            window.vjsPlayer = videojs('player-video', {
+		                controls: true,
+		                preload: 'auto',
+		                fluid: true,
+		            });
+		            initMseFmp4VideoJs(window.vjsPlayer, recordingUrl, duration);
+		            window.vjsPlayer.on('error', () => {
+		                const err = window.vjsPlayer.error();
+		                console.error('Video.js error:', err, 'src:', window.vjsPlayer.currentSrc());
+		            });
+
+		            const probeBtn = playerContainer.querySelector('#probe-fmp4-btn');
+		            if (probeBtn) {
+		                probeBtn.addEventListener('click', () => {
+		                    const src = probeBtn.getAttribute('data-url') || '';
+		                    const fmp4Url = src.replace(/([?&]format=)[^&]+/i, '$1fmp4');
+		                    probeMp4Fragmentation(fmp4Url);
+		                });
+		            }
 
 	            // Создаём оверлей
 	            let overlay = document.getElementById('player-overlay');
@@ -824,167 +838,410 @@
 	            return `${base}.${frac}Z`;
 	        }
 
-	        function buildPlaybackGetUrl(playbackUrl, pathParam, startIso, durationSeconds) {
-	            return `${playbackUrl}/get?path=${encodeURIComponent(pathParam)}&start=${encodeURIComponent(startIso)}&duration=${Math.ceil(durationSeconds)}&format=mp4`;
-	        }
+		        function buildPlaybackGetUrl(playbackUrl, pathParam, startIso, durationSeconds, format) {
+		            const fmt = format || 'mp4';
+		            return `${playbackUrl}/get?path=${encodeURIComponent(pathParam)}&start=${encodeURIComponent(startIso)}&duration=${Math.ceil(durationSeconds)}&format=${encodeURIComponent(fmt)}`;
+		        }
 
-	        function initChunkedVideoJs(player, recordingUrl, totalDuration) {
-	            const playbackUrlRaw = document.getElementById('playbackUrl').value.trim();
-	            const playbackUrl = playbackUrlRaw.replace(/\/+$/, '');
-	            const urlParams = new URL(recordingUrl);
-	            const pathParam = urlParams.searchParams.get('path') || '';
-	            const startParam = urlParams.searchParams.get('start') || '';
-	            const startParsed = parseRfc3339ToEpochNs(startParam);
-	            const startEpochNs = startParsed ? startParsed.epochNs : null;
-	            const startFracDigits = startParsed ? startParsed.fracDigits : 0;
+		        function splitFmp4InitAndMedia(bytes) {
+		            const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+		            let off = 0;
+		            let splitAt = null;
 
-	            const state = {
-	                playbackUrl,
-	                pathParam,
-	                startParam,
-	                startEpochNs,
-	                startFracDigits,
-	                totalDuration: Math.max(0, Number(totalDuration) || 0),
-	                chunkSize: 120,
-	                baseTime: 0,
-	                chunkDuration: 0,
-	                isLoading: false,
-	                pendingSeek: null,
-	                seekTimer: null,
-	                virtualTime: null,
-	            };
+		            while (off + 8 <= bytes.byteLength) {
+		                let size = view.getUint32(off, false);
+		                const type = String.fromCharCode(bytes[off + 4], bytes[off + 5], bytes[off + 6], bytes[off + 7]);
+		                let header = 8;
+		                if (size === 1) {
+		                    if (off + 16 > bytes.byteLength) break;
+		                    const hi = view.getUint32(off + 8, false);
+		                    const lo = view.getUint32(off + 12, false);
+		                    size = hi * 2 ** 32 + lo;
+		                    header = 16;
+		                } else if (size === 0) {
+		                    break;
+		                }
 
-	            const origCurrentTime = player.currentTime.bind(player);
-	            const origDuration = player.duration.bind(player);
+		                if (type === 'moof') {
+		                    splitAt = off;
+		                    break;
+		                }
 
-	            const setVirtualDuration = () => {
-	                try {
-	                    origDuration(state.totalDuration);
-	                    player.trigger('durationchange');
-	                } catch {
-	                    // ignore
-	                }
-	            };
+		                if (!Number.isFinite(size) || size < header) break;
+		                const next = off + size;
+		                if (next <= off || next > bytes.byteLength) break;
+		                off = next;
+		            }
 
-	            const clampToTimeline = (value) => {
-	                const t = Math.max(0, Number(value) || 0);
-	                if (state.totalDuration <= 0) return 0;
-	                return Math.min(state.totalDuration - 0.01, t);
-	            };
+		            if (splitAt == null) return { init: bytes, media: new Uint8Array() };
+		            return { init: bytes.slice(0, splitAt), media: bytes.slice(splitAt) };
+		        }
 
-	            const loadChunkAt = (absoluteSeconds, { autoplay = false, inChunkTime = 0 } = {}) => {
-	                if (!state.playbackUrl || !state.startEpochNs) {
-	                    player.src({ src: recordingUrl, type: 'video/mp4' });
-	                    setVirtualDuration();
-	                    return;
-	                }
+		        function sourceBufferUpdateEnd(sb) {
+		            return new Promise(resolve => {
+		                const handler = () => {
+		                    sb.removeEventListener('updateend', handler);
+		                    resolve();
+		                };
+		                sb.addEventListener('updateend', handler, { once: true });
+		            });
+		        }
 
-	                const abs = clampToTimeline(absoluteSeconds);
-	                const baseTime = Math.floor(abs);
-	                const startIso = baseTime === 0
-	                    ? state.startParam
-	                    : epochNsToRfc3339Utc(state.startEpochNs + BigInt(baseTime) * 1000000000n, state.startFracDigits);
-	                const remaining = state.totalDuration - baseTime;
-	                const chunkDuration = Math.min(state.chunkSize, Math.max(0, remaining));
-	                if (chunkDuration <= 0) return;
+		        async function appendToSourceBuffer(sb, u8) {
+		            if (!u8 || u8.byteLength === 0) return;
+		            while (sb.updating) {
+		                await sourceBufferUpdateEnd(sb);
+		            }
+		            sb.appendBuffer(u8);
+		            await sourceBufferUpdateEnd(sb);
+		        }
 
-	                state.isLoading = true;
-	                state.virtualTime = abs;
-	                state.baseTime = baseTime;
-	                state.chunkDuration = chunkDuration;
+		        async function removeFromSourceBuffer(sb, start, end) {
+		            while (sb.updating) {
+		                await sourceBufferUpdateEnd(sb);
+		            }
+		            sb.remove(start, end);
+		            await sourceBufferUpdateEnd(sb);
+		        }
 
-	                const src = buildPlaybackGetUrl(state.playbackUrl, state.pathParam, startIso, chunkDuration);
-	                player.src({ src, type: 'video/mp4' });
+		        function getBufferedEnd(videoEl) {
+		            const b = videoEl.buffered;
+		            if (!b || b.length === 0) return 0;
+		            return b.end(b.length - 1);
+		        }
 
-	                player.one('loadedmetadata', () => {
-	                    setVirtualDuration();
-	                    try {
-	                        origCurrentTime(Math.min(Math.max(0, Number(inChunkTime) || 0), Math.max(0, chunkDuration - 0.01)));
-	                    } catch {
-	                        // ignore
-	                    }
+		        function initMseFmp4VideoJs(player, recordingUrl, totalDuration) {
+		            const playbackUrlRaw = document.getElementById('playbackUrl').value.trim();
+		            const playbackUrl = playbackUrlRaw.replace(/\/+$/, '');
+		            const urlParams = new URL(recordingUrl);
+		            const pathParam = urlParams.searchParams.get('path') || '';
+		            const startParam = urlParams.searchParams.get('start') || '';
+		            const startParsed = parseRfc3339ToEpochNs(startParam);
+		            const startEpochNs = startParsed ? startParsed.epochNs : null;
+		            const startFracDigits = startParsed ? startParsed.fracDigits : 0;
 
-	                    state.isLoading = false;
-	                    state.virtualTime = null;
+			            const state = {
+			                playbackUrl,
+			                pathParam,
+			                startParam,
+			                startEpochNs,
+			                startFracDigits,
+			                totalDuration: Math.max(0, Number(totalDuration) || 0),
+		                chunkSize: 30,
+		                mediaSource: null,
+		                sourceBuffer: null,
+		                initSegment: null,
+		                nextBaseTime: 0,
+		                inflight: false,
+		                generation: 0,
+		                seekDebounce: null,
+		                lastRequestedTime: null,
+		                suppressSeeking: false,
+			                internalSetTime: false,
+			                objectUrl: null,
+			            };
 
-	                    if (autoplay) {
-	                        player.play().catch(() => {});
-	                    }
+			            function clamp(t) {
+			                const v = Math.max(0, Number(t) || 0);
+			                if (state.totalDuration <= 0) return 0;
+			                return Math.min(state.totalDuration - 0.01, v);
+			            }
 
-	                    if (state.pendingSeek != null) {
-	                        const pending = state.pendingSeek;
-	                        state.pendingSeek = null;
-	                        seekVirtual(pending);
-	                    }
-	                });
-	            };
+			            const origCurrentTime = player.currentTime.bind(player);
 
-	            const scheduleSeek = (t) => {
-	                state.pendingSeek = t;
-	                state.virtualTime = t;
-	                if (state.seekTimer) clearTimeout(state.seekTimer);
-	                state.seekTimer = setTimeout(() => {
-	                    const target = state.pendingSeek;
-	                    state.pendingSeek = null;
-	                    if (target == null) return;
-	                    seekVirtual(target);
-	                }, 200);
-	            };
+			            // Video.js ограничивает seek по player.seekable().
+			            // Для MSE у браузера seekable часто равен buffered, из-за чего клик по таймлайну "не работает".
+			            // Делаем виртуально seekable на всю длительность записи.
+			            const origDuration = player.duration.bind(player);
+			            const origSeekable = player.seekable.bind(player);
+			            try {
+			                player.seekable = function() {
+			                    try {
+			                        if (Number.isFinite(state.totalDuration) && state.totalDuration > 0 && videojs && typeof videojs.createTimeRanges === 'function') {
+			                            return videojs.createTimeRanges([[0, state.totalDuration]]);
+			                        }
+			                    } catch {
+			                        // ignore
+			                    }
+			                    return origSeekable();
+			                };
+			            } catch {
+			                // ignore
+			            }
 
-	            const seekVirtual = (t) => {
-	                const target = clampToTimeline(t);
-	                if (state.isLoading) {
-	                    state.pendingSeek = target;
-	                    state.virtualTime = target;
-	                    return target;
-	                }
-	                const autoplay = !player.paused();
-	                const baseTime = Math.floor(target);
-	                const inChunk = target - baseTime;
-	                loadChunkAt(target, { autoplay, inChunkTime: inChunk });
-	                return target;
-	            };
+			            // Перехватываем set currentTime (клик по таймлайну/ползунок) и делаем MSE seek.
+			            // Так работает надёжнее, чем полагаться на события seeking/seeked.
+			            try {
+			                player.currentTime = function(t) {
+			                    if (t === undefined) return origCurrentTime();
+			                    if (state.internalSetTime) return origCurrentTime(t);
 
-	            player.currentTime = function(t) {
-	                if (t === undefined) {
-	                    if (state.virtualTime != null) return state.virtualTime;
-	                    return state.baseTime + origCurrentTime();
-	                }
-	                scheduleSeek(t);
-	                return t;
-	            };
+			                    const target = clamp(t);
+			                    state.lastRequestedTime = target;
+			                    if (state.seekDebounce) clearTimeout(state.seekDebounce);
+			                    state.seekDebounce = setTimeout(() => {
+			                        handleSeek(state.lastRequestedTime);
+			                    }, 0);
 
-	            player.duration = function(d) {
-	                if (d === undefined) return state.totalDuration;
-	                return origDuration(d);
-	            };
+			                    // Обновляем UI немедленно (Video.js), даже если фактический буфер догрузим чуть позже.
+			                    state.internalSetTime = true;
+			                    try {
+			                        origCurrentTime(target);
+			                    } catch {
+			                        // ignore
+			                    } finally {
+			                        state.internalSetTime = false;
+			                    }
+			                    return target;
+			                };
+			            } catch {
+			                // ignore
+			            }
+			            try {
+			                player.duration = function(d) {
+			                    if (d === undefined) return state.totalDuration;
+			                    return origDuration(d);
+			                };
+			            } catch {
+			                // ignore
+			            }
 
-	            player.on('timeupdate', () => {
-	                if (state.isLoading) return;
-	                const abs = player.currentTime();
-	                const inChunk = abs - state.baseTime;
-	                const threshold = Math.max(0, state.chunkDuration - 10);
-	                if (state.chunkDuration > 0 && inChunk > threshold &&
-	                    state.baseTime + state.chunkDuration < state.totalDuration) {
-	                    const autoplay = !player.paused();
-	                    loadChunkAt(state.baseTime + state.chunkDuration, { autoplay, inChunkTime: 0 });
-	                }
-	            });
+		            if (!window.MediaSource || typeof window.MediaSource !== 'function') {
+		                console.warn('MediaSource not supported, falling back to direct MP4');
+		                player.src({ src: recordingUrl, type: 'video/mp4' });
+		                player.play().catch(() => {});
+		                return;
+		            }
 
-	            player.on('ended', () => {
-	                if (state.isLoading) return;
-	                if (state.baseTime + state.chunkDuration < state.totalDuration) {
-	                    loadChunkAt(state.baseTime + state.chunkDuration, { autoplay: true, inChunkTime: 0 });
-	                }
-	            });
+		            if (!window.MP4Box || typeof window.MP4Box.createFile !== 'function') {
+		                console.warn('MP4Box not available, falling back to direct MP4');
+		                player.src({ src: recordingUrl, type: 'video/mp4' });
+		                player.play().catch(() => {});
+		                return;
+		            }
 
-	            player.one('dispose', () => {
-	                if (state.seekTimer) clearTimeout(state.seekTimer);
-	            });
+		            if (!state.playbackUrl || !state.startEpochNs) {
+		                console.warn('Missing playbackUrl or start time, falling back to direct MP4');
+		                player.src({ src: recordingUrl, type: 'video/mp4' });
+		                player.play().catch(() => {});
+		                return;
+		            }
 
-	            // Старт: первый чанк
-	            loadChunkAt(0, { autoplay: false, inChunkTime: 0 });
-	        }
+		            const tech = player.tech(true);
+		            const videoEl = tech && tech.el ? tech.el() : null;
+		            if (!videoEl || !(videoEl instanceof HTMLVideoElement)) {
+		                console.warn('No HTMLVideoElement found for MSE, falling back to direct MP4');
+		                player.src({ src: recordingUrl, type: 'video/mp4' });
+		                player.play().catch(() => {});
+		                return;
+		            }
+
+			            const buildStartIsoAt = (baseTimeSeconds) => {
+			                const base = Math.max(0, Math.floor(Number(baseTimeSeconds) || 0));
+			                if (base === 0) return state.startParam;
+			                return epochNsToRfc3339Utc(state.startEpochNs + BigInt(base) * 1000000000n, state.startFracDigits);
+			            };
+
+		            const fetchFmp4 = async (baseTimeSeconds, generation) => {
+		                const base = Math.max(0, Math.floor(Number(baseTimeSeconds) || 0));
+		                const startIso = buildStartIsoAt(base);
+		                const remaining = state.totalDuration - base;
+		                const dur = Math.min(state.chunkSize, Math.max(0, remaining));
+		                const url = buildPlaybackGetUrl(state.playbackUrl, state.pathParam, startIso, dur, 'fmp4');
+		                const res = await fetch(url, { method: 'GET', headers: { Accept: 'video/mp4' } });
+		                if (generation !== state.generation) return null;
+		                if (!res.ok) throw new Error(`HTTP ${res.status} ${res.statusText}`);
+		                const u8 = new Uint8Array(await res.arrayBuffer());
+		                if (generation !== state.generation) return null;
+		                const { init, media } = splitFmp4InitAndMedia(u8);
+		                return { base, dur, init, media, url };
+		            };
+
+		            const detectCodec = (initU8) => {
+		                return new Promise((resolve, reject) => {
+		                    const mp4boxfile = window.MP4Box.createFile();
+		                    mp4boxfile.onError = (e) => reject(new Error(String(e)));
+		                    mp4boxfile.onReady = (info) => {
+		                        try {
+		                            const codecs = Array.from(new Set((info.tracks || []).map(t => t.codec).filter(Boolean)));
+		                            const codecStr = codecs.join(', ');
+		                            const mime = codecStr ? `video/mp4; codecs="${codecStr}"` : 'video/mp4';
+		                            resolve(mime);
+		                        } catch (e) {
+		                            reject(e);
+		                        }
+		                    };
+		                    const ab = initU8.buffer.slice(initU8.byteOffset, initU8.byteOffset + initU8.byteLength);
+		                    ab.fileStart = 0;
+		                    mp4boxfile.appendBuffer(ab);
+		                    mp4boxfile.flush();
+		                });
+		            };
+
+		            const ensureSourceBuffer = async (firstInit) => {
+		                if (state.sourceBuffer) return;
+		                const mime = await detectCodec(firstInit);
+		                console.log('MSE codec mime:', mime);
+		                if (!window.MediaSource.isTypeSupported(mime)) {
+		                    console.warn('MSE type not supported:', mime);
+		                    throw new Error(`MSE type not supported: ${mime}`);
+		                }
+		                state.sourceBuffer = state.mediaSource.addSourceBuffer(mime);
+		                state.sourceBuffer.mode = 'segments';
+		                try {
+		                    state.mediaSource.duration = state.totalDuration;
+		                } catch {
+		                    // ignore
+		                }
+		            };
+
+		            const appendChunk = async (chunk) => {
+		                if (!chunk) return;
+		                if (!state.sourceBuffer) {
+		                    await ensureSourceBuffer(chunk.init);
+		                }
+
+		                const sb = state.sourceBuffer;
+		                if (!state.initSegment) {
+		                    state.initSegment = chunk.init;
+		                    sb.timestampOffset = 0;
+		                    await appendToSourceBuffer(sb, chunk.init);
+		                }
+
+		                sb.timestampOffset = chunk.base;
+		                await appendToSourceBuffer(sb, chunk.media);
+		                state.nextBaseTime = chunk.base + Math.max(1, Math.floor(chunk.dur));
+		            };
+
+		            const pump = async () => {
+		                if (state.inflight) return;
+		                if (!state.sourceBuffer || !state.mediaSource) return;
+		                if (state.nextBaseTime >= state.totalDuration) return;
+
+		                const current = player.currentTime();
+		                const bufferedEnd = getBufferedEnd(videoEl);
+		                const ahead = bufferedEnd - current;
+		                if (ahead > 20) return;
+
+		                state.inflight = true;
+		                const gen = state.generation;
+		                try {
+		                    const chunk = await fetchFmp4(state.nextBaseTime, gen);
+		                    if (gen !== state.generation || !chunk) return;
+		                    await appendChunk(chunk);
+		                } catch (e) {
+		                    console.error('MSE pump error:', e);
+		                } finally {
+		                    state.inflight = false;
+		                }
+		            };
+
+				            async function handleSeek(targetTime) {
+				                if (!state.mediaSource || !state.sourceBuffer) return;
+				                const t = clamp(targetTime);
+				                const base = Math.max(0, Math.floor(t));
+				                const inChunk = t - base;
+			                const wasPlaying = !player.paused();
+			                const gen = ++state.generation;
+			                state.inflight = false;
+
+		                try { player.pause(); } catch {}
+
+			                try { state.sourceBuffer.abort(); } catch {}
+
+			                // Точно очищаем только реально буферизованные диапазоны, иначе remove() может падать.
+			                try {
+			                    const b = videoEl.buffered;
+			                    for (let i = 0; i < b.length; i++) {
+			                        const s = b.start(i);
+			                        const e = b.end(i);
+			                        if (e > s) {
+			                            await removeFromSourceBuffer(state.sourceBuffer, s, e);
+			                        }
+			                    }
+			                } catch (e) {
+			                    console.warn('SourceBuffer range-remove failed:', e);
+			                }
+
+			                // Заново добавляем init сегмент (нужен для декодера).
+			                if (state.initSegment) {
+			                    try {
+			                        state.sourceBuffer.timestampOffset = 0;
+			                        await appendToSourceBuffer(state.sourceBuffer, state.initSegment);
+			                    } catch (e) {
+			                        console.warn('Re-append init failed:', e);
+			                    }
+			                }
+
+			                try {
+			                    const chunk = await fetchFmp4(base, gen);
+			                    if (gen !== state.generation || !chunk) return;
+			                    await appendChunk(chunk);
+		                    state.suppressSeeking = true;
+		                    state.internalSetTime = true;
+		                    try {
+		                        player.currentTime(base + inChunk);
+		                    } finally {
+		                        state.internalSetTime = false;
+		                    }
+		                    setTimeout(() => { state.suppressSeeking = false; }, 0);
+		                    if (wasPlaying) player.play().catch(() => {});
+				                } catch (e) {
+				                    console.error('MSE seek error:', e);
+				                }
+				            }
+
+			            const onSeeking = () => {
+			                if (state.suppressSeeking) return;
+			                const t = player.currentTime();
+			                state.lastRequestedTime = t;
+			                if (state.seekDebounce) clearTimeout(state.seekDebounce);
+			                state.seekDebounce = setTimeout(() => {
+			                    handleSeek(state.lastRequestedTime);
+			                }, 200);
+			            };
+
+			            player.on('timeupdate', pump);
+			            player.on('seeking', onSeeking);
+			            // На некоторых связках Video.js/MSE событие может лучше приходить от нативного video.
+			            videoEl.addEventListener('seeking', onSeeking);
+
+			            player.one('dispose', () => {
+			                if (state.seekDebounce) clearTimeout(state.seekDebounce);
+			                player.off('timeupdate', pump);
+			                player.off('seeking', onSeeking);
+			                videoEl.removeEventListener('seeking', onSeeking);
+			                if (state.mediaSource && state.mediaSource.readyState === 'open') {
+			                    try { state.mediaSource.endOfStream(); } catch {}
+			                }
+			                if (state.objectUrl) {
+			                    try { URL.revokeObjectURL(state.objectUrl); } catch {}
+		                    state.objectUrl = null;
+		                }
+		            });
+
+		            const mediaSource = new MediaSource();
+		            state.mediaSource = mediaSource;
+		            const objectUrl = URL.createObjectURL(mediaSource);
+		            state.objectUrl = objectUrl;
+		            player.src({ src: objectUrl, type: 'video/mp4' });
+
+		            mediaSource.addEventListener('sourceopen', async () => {
+		                const gen = state.generation;
+		                try {
+		                    const chunk = await fetchFmp4(0, gen);
+		                    if (gen !== state.generation || !chunk) return;
+		                    await ensureSourceBuffer(chunk.init);
+		                    await appendChunk(chunk);
+		                    player.play().catch(() => {});
+		                } catch (e) {
+		                    console.error('MSE init error:', e);
+		                    console.warn('Falling back to direct MP4:', recordingUrl);
+		                    try { player.src({ src: recordingUrl, type: 'video/mp4' }); } catch {}
+		                    player.play().catch(() => {});
+		                }
+		            }, { once: true });
+		        }
 
 	        // Показать сообщение
 	        function showMessage(text, type) {
