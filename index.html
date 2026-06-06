@@ -904,13 +904,27 @@
 		            await sourceBufferUpdateEnd(sb);
 		        }
 
-		        function getBufferedEnd(videoEl) {
-		            const b = videoEl.buffered;
-		            if (!b || b.length === 0) return 0;
-		            return b.end(b.length - 1);
-		        }
+			        function getBufferedEnd(videoEl) {
+			            const b = videoEl.buffered;
+			            if (!b || b.length === 0) return 0;
+			            return b.end(b.length - 1);
+			        }
 
-		        function initMseFmp4VideoJs(player, recordingUrl, totalDuration) {
+			        function isTimeBuffered(videoEl, time) {
+			            const t = Number(time);
+			            if (!Number.isFinite(t)) return false;
+			            const b = videoEl.buffered;
+			            if (!b || b.length === 0) return false;
+			            const eps = 0.05;
+			            for (let i = 0; i < b.length; i++) {
+			                const s = b.start(i);
+			                const e = b.end(i);
+			                if (t + eps >= s && t <= e - eps) return true;
+			            }
+			            return false;
+			        }
+
+			        function initMseFmp4VideoJs(player, recordingUrl, totalDuration) {
 		            const playbackUrlRaw = document.getElementById('playbackUrl').value.trim();
 		            const playbackUrl = playbackUrlRaw.replace(/\/+$/, '');
 		            const urlParams = new URL(recordingUrl);
@@ -1134,24 +1148,26 @@
 			                await waitSourceBufferIdle(sb);
 			                sb.timestampOffset = chunk.base;
 			                await appendToSourceBuffer(sb, chunk.media);
-			                state.nextBaseTime = chunk.base + Math.max(1, Math.floor(chunk.dur));
+			                state.nextBaseTime = Math.max(state.nextBaseTime, chunk.base + Math.max(1, Math.floor(chunk.dur)));
 			            };
 
 			            const pump = async () => {
 			                if (state.inflight) return;
 			                if (state.isSeeking) return;
 			                if (!state.sourceBuffer || !state.mediaSource) return;
-			                if (state.nextBaseTime >= state.totalDuration) return;
 
-		                const current = player.currentTime();
-		                const bufferedEnd = getBufferedEnd(videoEl);
-		                const ahead = bufferedEnd - current;
-		                if (ahead > 20) return;
+			                const current = player.currentTime();
+			                const bufferedEnd = getBufferedEnd(videoEl);
+			                const ahead = bufferedEnd - current;
+			                if (ahead > 20) return;
+
+			                const nextBaseTime = Math.max(0, Math.floor(bufferedEnd));
+			                if (nextBaseTime >= state.totalDuration) return;
 
 			                state.inflight = true;
 			                const gen = state.generation;
 			                try {
-			                    const chunk = await fetchFmp4(state.nextBaseTime, gen);
+			                    const chunk = await fetchFmp4(nextBaseTime, gen);
 			                    if (gen !== state.generation || !chunk) return;
 			                    await enqueueSourceBufferOp(() => appendChunk(chunk));
 			                } catch (e) {
@@ -1164,6 +1180,18 @@
 			            async function handleSeek(targetTime) {
 			                if (!state.mediaSource || !state.sourceBuffer) return;
 			                const t = clamp(targetTime);
+			                if (isTimeBuffered(videoEl, t)) {
+			                    state.suppressSeeking = true;
+			                    state.internalSetTime = true;
+			                    try {
+			                        player.currentTime(t);
+			                    } finally {
+			                        state.internalSetTime = false;
+			                    }
+			                    setTimeout(() => { state.suppressSeeking = false; }, 0);
+			                    return;
+			                }
+
 			                const base = Math.max(0, Math.floor(t));
 			                const inChunk = t - base;
 			                const wasPlaying = !player.paused();
@@ -1189,30 +1217,8 @@
 
 			                try {
 			                    await enqueueSourceBufferOp(async () => {
-			                        const sb = state.sourceBuffer;
-			                        try { sb.abort(); } catch {}
-
-			                        // Чистим текущие буферы
-			                        try {
-			                            const b = videoEl.buffered;
-			                            for (let i = 0; i < b.length; i++) {
-			                                const s = b.start(i);
-			                                const e = b.end(i);
-			                                if (e > s) {
-			                                    await removeFromSourceBuffer(sb, s, e);
-			                                }
-			                            }
-			                        } catch (e) {
-			                            console.warn('SourceBuffer range-remove failed:', e);
-			                        }
-
-			                        // Заново init
-			                        if (state.initSegment) {
-			                            await waitSourceBufferIdle(sb);
-			                            sb.timestampOffset = 0;
-			                            await appendToSourceBuffer(sb, state.initSegment);
-			                        }
-
+			                        // Не очищаем буфер при позиционировании: сохраняем кеш.
+			                        // Просто докидываем нужный чанк в нужную позицию таймлайна.
 			                        await appendChunk(chunk);
 			                    });
 			                } catch (e) {
@@ -1226,7 +1232,7 @@
 			                state.suppressSeeking = true;
 			                state.internalSetTime = true;
 			                try {
-			                    player.currentTime(base + inChunk);
+				                    player.currentTime(base + inChunk);
 			                } finally {
 			                    state.internalSetTime = false;
 			                }
